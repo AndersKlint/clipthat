@@ -1,6 +1,7 @@
 import 'package:flex_color_scheme/flex_color_scheme.dart';
 import 'package:flutter/material.dart';
 import 'package:process_run/shell.dart';
+import 'package:yt_section_downloader/video_task.dart';
 
 void main() {
   runApp(MyApp());
@@ -32,58 +33,63 @@ class VideoDownloader extends StatefulWidget {
 }
 
 class _VideoDownloaderState extends State<VideoDownloader> {
-  TextEditingController startUrlController = TextEditingController();
-  TextEditingController endUrlController = TextEditingController();
-  TextEditingController filePathController =
+  final TextEditingController _startUrlController = TextEditingController();
+  final TextEditingController _endUrlController = TextEditingController();
+  final TextEditingController _filePathController =
       TextEditingController(text: "/home/anders/Videos/test");
-  bool includeSubtitles = false;
-  List<Map<String, String>> downloadQueue = []; // Queue to hold video tasks
-  bool isProcessing = false;
-  Map<String, String> _currentTask = {};
+  bool _includeSubtitles = true;
+  final List<VideoTask> _taskQueue = []; // Queue to hold video tasks
+  final List<VideoTask> _finishedTasks = [];
+  bool _isProcessing = false;
+  VideoTask? _currentTask;
   String? _prevVideoTempPath;
 
-  // Function to add a task to the queue
-  void addTaskToQueue(String startUrl, String endUrl, String savePath) {
+  void _addTaskToQueue(
+      String startUrl, String endUrl, String outputDirectoryPath) {
     setState(() {
-      downloadQueue.add({
-        'startUrl': startUrl,
-        'endUrl': endUrl,
-        'savePath': savePath,
-        'videoId': _parseYouTubeVideoId(startUrl),
-        'status': 'Queued',
-      });
+      _taskQueue.add(VideoTask(
+          startUrl: startUrl,
+          endUrl: endUrl,
+          outputDirectoryPath: outputDirectoryPath,
+          status: VideoTaskStatus.queued));
     });
 
     // Process the queue if not already processing
-    if (!isProcessing) {
+    if (!_isProcessing) {
       processQueue();
     }
+  }
+
+  void _removeTask(VideoTask task) {
+    setState(() {
+      if (task.status == VideoTaskStatus.completed) {
+        _finishedTasks.remove(task);
+      } else {
+        _taskQueue.remove(task);
+      }
+    });
   }
 
   // Function to process the queue one at a time
   Future<void> processQueue() async {
     setState(() {
-      isProcessing = true;
+      _isProcessing = true;
     });
 
-    while (downloadQueue.isNotEmpty) {
-      _currentTask = downloadQueue.first; // Get the first task
-      String startUrl = _currentTask['startUrl']!;
-      String endUrl = _currentTask['endUrl']!;
-      String savePath = _currentTask['savePath']!;
-      String videoId = _currentTask['videoId']!;
+    while (_taskQueue.isNotEmpty) {
+      _currentTask = _taskQueue.first; // Get the first task
 
       // Call downloadAndCutVideo method (which will handle downloading and cutting)
       try {
-        await downloadAndCutVideo(videoId, startUrl, endUrl, savePath);
+        await downloadAndCutVideo(_currentTask!);
         setState(() {
-          _currentTask['status'] = 'Completed';
+          _currentTask!.status = VideoTaskStatus.completed;
         });
       } catch (e) {}
 
       // Remove the task from the queue after processing
       setState(() {
-        downloadQueue.removeAt(0);
+        _finishedTasks.add(_taskQueue.removeAt(0));
       });
 
       await Future.delayed(Duration(
@@ -91,41 +97,21 @@ class _VideoDownloaderState extends State<VideoDownloader> {
     }
 
     setState(() {
-      isProcessing = false;
+      _isProcessing = false;
     });
   }
 
-  String _parseYouTubeVideoId(String url) {
-    // Check for youtu.be URLs and extract the video ID
-    if (url.contains('youtu.be/')) {
-      return url.split('youtu.be/')[1].split('?')[0];
-    }
-    // Check for youtube.com URLs and extract the video ID
-    else if (url.contains('youtube.com')) {
-      final match = RegExp(r'[?&]v=([a-zA-Z0-9_-]+)').firstMatch(url);
-      if (match != null) {
-        return match.group(1)!;
-      }
-    }
-
-    throw FormatException("Unable to extract video ID from URL: $url");
-  }
-
-  Future<void> downloadAndCutVideo(
-      String videoId, String startUrl, String endUrl, String savePath) async {
-    RegExp timeRegex = RegExp(r"[?&]t=(\d+)");
-    int? startTime =
-        int.tryParse(timeRegex.firstMatch(startUrl)?.group(1) ?? '0');
-    int? endTime = int.tryParse(timeRegex.firstMatch(endUrl)?.group(1) ?? '0');
-
-    if (startTime == null || endTime == null || endTime <= startTime) {
+  Future<void> downloadAndCutVideo(VideoTask task) async {
+    if (task.endTime <= task.startTime) {
       throw 'Invalid timestamps';
     }
 
     var shell = Shell();
 
-    String tempVideoPath = '/tmp/yt_dw_segment_$videoId.mkv';
-    String tempSubtitlePath = '/tmp/yt_dw_segment_$videoId.mkv.en.vtt';
+    // Should be unique per video, but not timestamp. We download the full video every time.
+    String tempVideoPath = '/tmp/yt_dw_segment_${task.videoId}.mkv';
+    String tempSubtitlePath =
+        '$tempVideoPath.en.vtt'; // As per definition by yt-dlp
     if (_prevVideoTempPath != null &&
         _prevVideoTempPath!.isNotEmpty &&
         tempVideoPath != _prevVideoTempPath!) {
@@ -135,53 +121,54 @@ class _VideoDownloaderState extends State<VideoDownloader> {
     _prevVideoTempPath = tempVideoPath;
     String formatOption = "-f 'bestvideo[height<=1080]+bestaudio/best'";
     String subtitlesOption =
-        includeSubtitles ? "--write-subs --sub-lang en --sub-format vtt" : "";
+        _includeSubtitles ? "--write-subs --sub-lang en --sub-format vtt" : "";
     String additionalArgs = '--remux-video mkv';
-    int duration = endTime - startTime;
+    int duration = task.endTime - task.startTime;
     String outputVideoPath =
-        '$savePath/${videoId}_${startTime}s_to_${endTime}s.mkv';
+        '${task.outputDirectoryPath}/${task.fileBasename}.mkv';
     String outputSubtitlePath =
-        '$savePath/${videoId}_${startTime}s_to_${endTime}s.en.vtt';
+        '${task.outputDirectoryPath}/${task.fileBasename}.en.vtt';
 
     try {
       setState(() {
-        _currentTask['status'] = 'Downloading';
+        _currentTask?.status = VideoTaskStatus.downloading;
       });
 
       // Download video
+      // TODO: is it faster to have startUrl instead?
       await shell.run('''
-        yt-dlp $formatOption $subtitlesOption -o "$tempVideoPath" "$startUrl" $additionalArgs
+        yt-dlp $formatOption $subtitlesOption -o "$tempVideoPath" "${task.url}" $additionalArgs
       ''');
 
       setState(() {
-        _currentTask['status'] = 'Cutting & Encoding';
+        _currentTask?.status = VideoTaskStatus.cuttingAndDecoding;
       });
 
       // Cut video with ffmpeg (forcing keyframes)
       print('Cutting video with ffmpeg...');
 
       await shell.run('''
-        ffmpeg -i "$tempVideoPath" -ss $startTime -t $duration -c:v libx264 -preset fast -c:a aac -strict experimental -y "$outputVideoPath"
+        ffmpeg -i "$tempVideoPath" -ss ${task.startTime} -t $duration -c:v libx264 -preset fast -c:a aac -strict experimental -y "$outputVideoPath"
       ''');
 
       // Cut subtitle file if it exists
-      if (includeSubtitles) {
+      if (_includeSubtitles) {
         String tempCutSubPath = '/tmp/sub_cut.vtt';
 
         await shell.run('''
-          ffmpeg -i "$tempSubtitlePath" -ss $startTime -t $duration "$tempCutSubPath" -y
+          ffmpeg -i "$tempSubtitlePath" -ss ${task.startTime}  -t $duration "$tempCutSubPath" -y
         ''');
         await shell.run('''
-          ffmpeg -itsoffset "-$startTime" -i "$tempCutSubPath" -c copy "$outputSubtitlePath" -y
+          ffmpeg -itsoffset "-${task.startTime}" -i "$tempCutSubPath" -c copy "$outputSubtitlePath" -y
         ''');
       }
 
       setState(() {
-        _currentTask['status'] = 'Completed';
+        _currentTask?.status = VideoTaskStatus.completed;
       });
     } catch (e) {
       setState(() {
-        _currentTask['status'] = 'Failed';
+        _currentTask?.status = VideoTaskStatus.queued;
       });
       throw 'Error during download or cutting: $e';
     }
@@ -189,6 +176,7 @@ class _VideoDownloaderState extends State<VideoDownloader> {
 
   @override
   Widget build(BuildContext context) {
+    var allTasks = _finishedTasks + _taskQueue;
     return Scaffold(
       appBar: AppBar(title: Text('YouTube Video Cutter')),
       body: Padding(
@@ -196,25 +184,25 @@ class _VideoDownloaderState extends State<VideoDownloader> {
         child: Column(
           children: [
             TextField(
-              controller: startUrlController,
+              controller: _startUrlController,
               decoration:
                   InputDecoration(labelText: 'YouTube URL (Start Time)'),
             ),
             TextField(
-              controller: endUrlController,
+              controller: _endUrlController,
               decoration: InputDecoration(labelText: 'YouTube URL (End Time)'),
             ),
             TextField(
-              controller: filePathController,
-              decoration: InputDecoration(labelText: 'Save File Path'),
+              controller: _filePathController,
+              decoration: InputDecoration(labelText: 'Output Directory'),
             ),
             Row(
               children: [
                 Checkbox(
-                  value: includeSubtitles,
+                  value: _includeSubtitles,
                   onChanged: (bool? value) {
                     setState(() {
-                      includeSubtitles = value ?? false;
+                      _includeSubtitles = value ?? false;
                     });
                   },
                 ),
@@ -224,31 +212,48 @@ class _VideoDownloaderState extends State<VideoDownloader> {
             SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
-                String startUrl = startUrlController.text;
-                String endUrl = endUrlController.text;
-                String savePath = filePathController.text;
+                String startUrl = _startUrlController.text;
+                String endUrl = _endUrlController.text;
+                String outputDirectoryPath = _filePathController.text;
 
                 if (startUrl.isNotEmpty &&
                     endUrl.isNotEmpty &&
-                    savePath.isNotEmpty) {
-                  addTaskToQueue(startUrl, endUrl, savePath);
+                    outputDirectoryPath.isNotEmpty) {
+                  _addTaskToQueue(startUrl, endUrl, outputDirectoryPath);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('Please fill all fields')),
                   );
                 }
               },
-              child: Text('Add to Queue'),
+              child:
+                  _isProcessing ? Text('Add to Queue') : Text('Download & Cut'),
             ),
             SizedBox(height: 20),
             Expanded(
               child: ListView.builder(
-                itemCount: downloadQueue.length,
+                itemCount: allTasks.length,
                 itemBuilder: (context, index) {
-                  Map<String, String> task = downloadQueue[index];
+                  var task = allTasks[index];
                   return ListTile(
-                    title: Text('Task ${index + 1}'),
-                    subtitle: Text(task['status']!),
+                    trailing: task.status == VideoTaskStatus.downloading ||
+                            task.status == VideoTaskStatus.cuttingAndDecoding
+                        ? null
+                        : IconButton(
+                            icon: task.status == VideoTaskStatus.completed
+                                ? Icon(
+                                    Icons.check,
+                                    color: Colors.green,
+                                  )
+                                : Icon(Icons.close, color: Colors.red),
+                            onPressed: task.status == VideoTaskStatus.queued ||
+                                    task.status == VideoTaskStatus.completed
+                                ? () => _removeTask(task)
+                                : null),
+                    title: Text(
+                      '${task.url} (${task.startTime}s - ${task.endTime}s)',
+                    ),
+                    subtitle: Text(task.prettyPrintStatus()),
                   );
                 },
               ),
