@@ -26,48 +26,129 @@ class _VideoDownloaderState extends State<VideoDownloader> {
   TextEditingController filePathController =
       TextEditingController(text: "/home/anders/Videos/test");
   bool includeSubtitles = false;
+  List<Map<String, String>> downloadQueue = []; // Queue to hold video tasks
+  bool isProcessing = false;
+  Map<String, String> _currentTask = {};
+  String? _prevVideoTempPath;
 
-  Future<void> downloadAndCutVideo() async {
-    String startUrl = startUrlController.text;
-    String endUrl = endUrlController.text;
-    String savePath = filePathController.text;
+  // Function to add a task to the queue
+  void addTaskToQueue(String startUrl, String endUrl, String savePath) {
+    setState(() {
+      downloadQueue.add({
+        'startUrl': startUrl,
+        'endUrl': endUrl,
+        'savePath': savePath,
+        'videoId': _parseYouTubeVideoId(startUrl),
+        'status': 'Queued',
+      });
+    });
 
-    if (startUrl.isEmpty || endUrl.isEmpty || savePath.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please fill all fields')),
-      );
-      return;
+    // Process the queue if not already processing
+    if (!isProcessing) {
+      processQueue();
+    }
+  }
+
+  // Function to process the queue one at a time
+  Future<void> processQueue() async {
+    setState(() {
+      isProcessing = true;
+    });
+
+    while (downloadQueue.isNotEmpty) {
+      _currentTask = downloadQueue.first; // Get the first task
+      String startUrl = _currentTask['startUrl']!;
+      String endUrl = _currentTask['endUrl']!;
+      String savePath = _currentTask['savePath']!;
+      String videoId = _currentTask['videoId']!;
+
+      // Call downloadAndCutVideo method (which will handle downloading and cutting)
+      try {
+        await downloadAndCutVideo(videoId, startUrl, endUrl, savePath);
+        setState(() {
+          _currentTask['status'] = 'Completed';
+        });
+      } catch (e) {}
+
+      // Remove the task from the queue after processing
+      setState(() {
+        downloadQueue.removeAt(0);
+      });
+
+      await Future.delayed(Duration(
+          seconds: 1)); // Wait for a second before processing next task
     }
 
+    setState(() {
+      isProcessing = false;
+    });
+  }
+
+  String _parseYouTubeVideoId(String url) {
+    // Check for youtu.be URLs and extract the video ID
+    if (url.contains('youtu.be/')) {
+      return url.split('youtu.be/')[1].split('?')[0];
+    }
+    // Check for youtube.com URLs and extract the video ID
+    else if (url.contains('youtube.com')) {
+      final match = RegExp(r'[?&]v=([a-zA-Z0-9_-]+)').firstMatch(url);
+      if (match != null) {
+        return match.group(1)!;
+      }
+    }
+
+    throw FormatException("Unable to extract video ID from URL: $url");
+  }
+
+  Future<void> downloadAndCutVideo(
+      String videoId, String startUrl, String endUrl, String savePath) async {
     RegExp timeRegex = RegExp(r"[?&]t=(\d+)");
     int? startTime =
         int.tryParse(timeRegex.firstMatch(startUrl)?.group(1) ?? '0');
     int? endTime = int.tryParse(timeRegex.firstMatch(endUrl)?.group(1) ?? '0');
 
     if (startTime == null || endTime == null || endTime <= startTime) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Invalid timestamps')),
-      );
-      return;
+      throw 'Invalid timestamps';
     }
 
-    String tempVideoPath = '/tmp/video.mkv';
-    String tempSubtitlePath = '/tmp/video.mkv.en.vtt';
+    var shell = Shell();
+
+    String tempVideoPath = '/tmp/yt_dw_segment_$videoId.mkv';
+    String tempSubtitlePath = '/tmp/yt_dw_segment_$videoId.mkv.en.vtt';
+    if (_prevVideoTempPath != null &&
+        _prevVideoTempPath!.isNotEmpty &&
+        tempVideoPath != _prevVideoTempPath!) {
+      await shell.run("rm $_prevVideoTempPath");
+    }
+
+    _prevVideoTempPath = tempVideoPath;
     String formatOption = "-f 'bestvideo[height<=1080]+bestaudio/best'";
     String subtitlesOption =
         includeSubtitles ? "--write-subs --sub-lang en --sub-format vtt" : "";
     String additionalArgs = '--remux-video mkv';
     int duration = endTime - startTime;
+    String outputVideoPath =
+        '$savePath/${videoId}_${startTime}s_to_${endTime}s.mkv';
+    String outputSubtitlePath =
+        '$savePath/${videoId}_${startTime}s_to_${endTime}s.en.vtt';
 
-    var shell = Shell();
     try {
+      setState(() {
+        _currentTask['status'] = 'Downloading';
+      });
+
+      // Download video
       await shell.run('''
         yt-dlp $formatOption $subtitlesOption -o "$tempVideoPath" "$startUrl" $additionalArgs
       ''');
 
+      setState(() {
+        _currentTask['status'] = 'Cutting & Encoding';
+      });
+
       // Cut video with ffmpeg (forcing keyframes)
       print('Cutting video with ffmpeg...');
-      String outputVideoPath = '$savePath/output_video.mkv';
+
       await shell.run('''
         ffmpeg -i "$tempVideoPath" -ss $startTime -t $duration -c:v libx264 -preset fast -c:a aac -strict experimental -y "$outputVideoPath"
       ''');
@@ -75,26 +156,23 @@ class _VideoDownloaderState extends State<VideoDownloader> {
       // Cut subtitle file if it exists
       if (includeSubtitles) {
         String tempCutSubPath = '/tmp/sub_cut.vtt';
-        String outputSubtitlePath = '$savePath/output_subtitles.vtt';
+
         await shell.run('''
           ffmpeg -i "$tempSubtitlePath" -ss $startTime -t $duration "$tempCutSubPath" -y
-
         ''');
         await shell.run('''
           ffmpeg -itsoffset "-$startTime" -i "$tempCutSubPath" -c copy "$outputSubtitlePath" -y
         ''');
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Download and cut complete!')),
-      );
+      setState(() {
+        _currentTask['status'] = 'Completed';
+      });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          duration: Duration(minutes: 5),
-        ),
-      );
+      setState(() {
+        _currentTask['status'] = 'Failed';
+      });
+      throw 'Error during download or cutting: $e';
     }
   }
 
@@ -134,8 +212,35 @@ class _VideoDownloaderState extends State<VideoDownloader> {
             ),
             SizedBox(height: 20),
             ElevatedButton(
-              onPressed: downloadAndCutVideo,
-              child: Text('Download & Cut Video'),
+              onPressed: () {
+                String startUrl = startUrlController.text;
+                String endUrl = endUrlController.text;
+                String savePath = filePathController.text;
+
+                if (startUrl.isNotEmpty &&
+                    endUrl.isNotEmpty &&
+                    savePath.isNotEmpty) {
+                  addTaskToQueue(startUrl, endUrl, savePath);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Please fill all fields')),
+                  );
+                }
+              },
+              child: Text('Add to Queue'),
+            ),
+            SizedBox(height: 20),
+            Expanded(
+              child: ListView.builder(
+                itemCount: downloadQueue.length,
+                itemBuilder: (context, index) {
+                  Map<String, String> task = downloadQueue[index];
+                  return ListTile(
+                    title: Text('Task ${index + 1}'),
+                    subtitle: Text(task['status']!),
+                  );
+                },
+              ),
             ),
           ],
         ),
