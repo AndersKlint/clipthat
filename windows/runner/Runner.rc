@@ -89,13 +89,15 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "yt_section_downloader" "\0"
+            VALUE "CompanyName", "Dr. Jetski Studios" "\0"
+            VALUE "FileDescription", "ClipThat! – Paste a Link. Grab Your Clip." "\0"
+            VALUE "Comments", "The quickest way to extract and download any section of a video from a link. By pasting a timestamped URL, or by providing your own custom timestamps, downloading and cutting are handled automatically. With built-in job queuing, you can queue and clip multiple videos and sections all at once!" "\0"
+            VALUE "Website", "https://drjetski.com" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "yt_section_downloader" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Dr. Jetski Studios. All rights reserved." "\0"
             VALUE "OriginalFilename", "yt_section_downloader.exe" "\0"
-            VALUE "ProductName", "yt_section_downloader" "\0"
+            VALUE "ProductName", "ClipThat!" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

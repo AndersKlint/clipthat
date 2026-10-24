@@ -1,12 +1,10 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=YT Clip Extractor
-Comment=Download specific sections for YouTube videos.
-Exec=/home/anders/git/yt_section_downloader/build/linux/x64/release/bundle/yt_section_downloader
+Name=ClipThat!
+Comment=Paste a link. Grab your clip.
+Exec=yt_section_downloader
 Icon=edit-cut
 Terminal=false
-Type=Application
 Categories=Utility;AudioVideo;Network;
-StartupWMClass=com.example.yt_section_downloader
-
+StartupWMClass=com.drjetski.clipthat

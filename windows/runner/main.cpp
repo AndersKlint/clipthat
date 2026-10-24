@@ -1,6 +1,9 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
+#include <shobjidl.h>
+
+#include <string>
 
 #include "flutter_window.h"
 #include "utils.h"
@@ -11,6 +14,17 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
     CreateAndAttachConsole();
+  }
+
+  const HRESULT app_id_result =
+      ::SetCurrentProcessExplicitAppUserModelID(L"com.drjetski.clipthat");
+  if (FAILED(app_id_result)) {
+    const std::wstring message =
+        L"Could not initialize the Windows application identity "
+        L"com.drjetski.clipthat. HRESULT: " + std::to_wstring(app_id_result);
+    ::MessageBoxW(nullptr, message.c_str(), L"ClipThat! startup error",
+                  MB_OK | MB_ICONERROR);
+    return EXIT_FAILURE;
   }
 
   // Initialize COM, so that it is available for use in the library and/or
@@ -26,8 +40,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
-  Win32Window::Size size(1280, 720);
-  if (!window.Create(L"yt_section_downloader", origin, size)) {
+  Win32Window::Size size(1200, 800);
+  if (!window.Create(L"ClipThat! \u2013 Paste a Link. Grab Your Clip.", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
