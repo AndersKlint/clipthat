@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "version": "2026.10.21",
+  "verified_on": "2026-10-24",
+  "provenance": "Version-specific PyPI JSON SHA256 records, python.org release SPDX/catalog records, and exact upstream Git revisions. Git snapshots without upstream archive digests are verified by commit and hashed after creation.",
+  "packages": [
+    {
+      "name": "pip", "version": "26.2.2", "role": "build",
+      "source": {"url": "https://files.pythonhosted.org/packages/fa/e8/0842d757e483e895e670f655084cfe8b8c72580c6769a76b30b2789a0608/pip-26.2.2.tar.gz", "sha256": "3a8e5c800492787f33a4114ef54444546c340df428974ebba17e0fd47e11af2f"},
+      "wheels": {"any": {"url": "https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl", "sha256": "fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70"}}
+    },
+    {
+      "name": "yt-dlp", "version": "2026.10.21", "role": "runtime", "license": "Unlicense",
+      "source": {"url": "https://files.pythonhosted.org/packages/06/13/d2ea252871826205dc4965cb70e6037ab93697fcabf4feda49fe981f6da0/yt_dlp-2026.10.21.tar.gz", "sha256": "cbf748d7d17cd37647c4b9f07b6c25f24384bfd4361407ee5ec519e753d22539"},
+      "wheels": {"any": {"url": "https://files.pythonhosted.org/packages/b7/75/ae700ddc7e0b1095fd06cf7e251627dcf4cafcaff460cce92cdc08023b13/yt_dlp-2026.10.21-py3-none-any.whl", "sha256": "94a3a3e2c423129d0bbd2f1be000c4171fa1226c29e251c84aff868f2851c247"}}
+    },
+    {
+      "name": "yt-dlp-ejs", "version": "0.8.0", "role": "runtime", "license": "Unlicense AND MIT AND ISC",
+      "source": {"url": "https://files.pythonhosted.org/packages/d3/e6/cceb9530e8f4e5940f6f7822d90e9d94f1b85343329a16baaf47bbbb3de1/yt_dlp_ejs-0.8.0.tar.gz", "sha256": "d5fa1639f63b5c4af8d932495f60689d5370f1a095782c944f7f62a303eb104e"},
+      "wheels": {"any": {"url": "https://files.pythonhosted.org/packages/e3/bd/520769863744b669440a924271a6159ddd82ad5ae26b4ac4d4b69e9f8d44/yt_dlp_ejs-0.8.0-py3-none-any.whl", "sha256": "79300e5fca7f937a1eeede11f0456862c1b41107ce1d726871e0207424f4bdb4"}}
+    },
+    {
+      "name": "certifi", "version": "2026.10.19", "role": "runtime", "license": "MPL-2.0",
+      "source": {"url": "https://files.pythonhosted.org/packages/a6/bd/1436c50cc46699de0230fbaacc1d1de7bfec413176099949e9d5112e88f2/certifi-2026.10.19.tar.gz", "sha256": "035c1e85572b141bf1c3a3eff0e33a8eb74917522f2559075ff8d2fea780a1ae"},
+      "wheels": {"any": {"url": "https://files.pythonhosted.org/packages/c4/51/29046e48f693c54e5b7412216d447a1d8362c9653148d98c02cdf65fa733/certifi-2026.10.19-py3-none-any.whl", "sha256": "42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b"}}
+    },
+    {
+      "name": "pyinstaller", "version": "6.22.0", "role": "freezer", "license": "GPL-2.0-or-later WITH Bootloader-exception AND Apache-2.0",
+      "source": {"url": "https://files.pythonhosted.org/packages/05/03/669d06735cf57d7e2e5dfc3c2e1643554b34c559eff21449c58172ca0335/pyinstaller-6.22.0.tar.gz", "sha256": "8b0166fff4583b374bbe7fa044bf03ddc33cab0f792a665807d96048e63f060e"},
+      "wheels": {
+        "linux-x64": {"url": "https://files.pythonhosted.org/packages/ea/aa/3733a6f590075c8a6678072480ee22f7b0237f7952b2c1521d5aafa15514/pyinstaller-6.22.0-py3-none-manylinux2014_x86_64.whl", "sha256": "b07ac9fd1d661ae4d0af6752c3941e4e5576a16cfe7e2d6504a32d57e17d0acc"},
+        "windows-x64": {"url": "https://files.pythonhosted.org/packages/3a/a7/0ea60e966a0da82961ecba80177627fae28fdda5127993281db479ee46fc/pyinstaller-6.22.0-py3-none-win_amd64.whl", "sha256": "6e5f3656de100954bf5db25536c43e097e46d482843a96d03a0852bf266e4853"}
+      }
+    },
+    {
+      "name": "altgraph", "version": "0.17.5", "role": "build",
+      "source": {"url": "https://files.pythonhosted.org/packages/7e/f8/97fdf103f38fed6792a1601dbc16cc8aac56e7459a9fff08c812d8ae177a/altgraph-0.17.5.tar.gz", "sha256": "c87b395dd12fabde9c99573a9749d67da8d29ef9de0125c7f536699b4a9bc9e7"},
+      "wheels": {"any": {"url": "https://files.pythonhosted.org/packages/a9/ba/000a1996d4308bc65120167c21241a3b205464a2e0b58deda26ae8ac21d1/altgraph-0.17.5-py2.py3-none-any.whl", "sha256": "f3a22400bce1b0c701683820ac4f3b159cd301acab067c51c653e06961600597"}}
+    },
+    {
+      "name": "packaging", "version": "26.3", "role": "build",
+      "source": {"url": "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz", "sha256": "94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79"},
+      "wheels": {"any": {"url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl", "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"}}
+    },
+    {
+      "name": "pyinstaller-hooks-contrib", "version": "2026.9", "role": "build",
+      "source": {"url": "https://files.pythonhosted.org/packages/96/25/e47c6188228281372be7e9911a93931e01ec8798c02c93abd680b9b9521f/pyinstaller_hooks_contrib-2026.9.tar.gz", "sha256": "2748767901acb5cecd1304652b6c7add5bffcff1d71d01207fe24a5d42942a56"},
+      "wheels": {"any": {"url": "https://files.pythonhosted.org/packages/93/fe/ded0e20de0580257d97dbabb4db7ab4d96ad8ade7d41149e66308057cf52/pyinstaller_hooks_contrib-2026.9-py3-none-any.whl", "sha256": "fb3e67dd64122561724c48ad0366ac9e8c16e638b63bf7d85de03bf3fdbf06c3"}}
+    },
+    {
+      "name": "setuptools", "version": "84.2.1", "role": "build",
+      "source": {"url": "https://files.pythonhosted.org/packages/70/b3/c19426f783614d625699a4b247faf628ea9ab1db228674491767b417f9e1/setuptools-84.2.1.tar.gz", "sha256": "3ff8b3b5492a0aa66960f4419365a86b84e013070d4313e4d4a6894f5d64d6bc"},
+      "wheels": {"any": {"url": "https://files.pythonhosted.org/packages/ef/55/6dc6d6bb953bdfc52519a0059592c52b6e3b8ad51cf8256dffceb55b0610/setuptools-84.2.1-py3-none-any.whl", "sha256": "ca140b45d5325a9478f880e351484f62fef15f336462e449ca0c03c873d589c2"}}
+    },
+    {
+      "name": "pefile", "version": "2024.8.26", "role": "build", "platforms": ["windows-x64"],
+      "source": {"url": "https://files.pythonhosted.org/packages/03/4f/2750f7f6f025a1507cd3b7218691671eecfd0bbebebe8b39aa0fe1d360b8/pefile-2024.8.26.tar.gz", "sha256": "3ff6c5d8b43e8c37bb6e6dd5085658d658a7a0bdcd20b6a07b1fcfc1c4e9d632"},
+      "wheels": {"any": {"url": "https://files.pythonhosted.org/packages/54/16/12b82f791c7f50ddec566873d5bdd245baa1491bac11d15ffb98aecc8f8b/pefile-2024.8.26-py3-none-any.whl", "sha256": "76f8b485dcd3b1bb8166f1128d395fa3d87af26360c2358fb75b80019b957c6f"}}
+    },
+    {
+      "name": "pywin32-ctypes", "version": "0.2.3", "role": "build", "platforms": ["windows-x64"],
+      "source": {"url": "https://files.pythonhosted.org/packages/85/9f/01a1a99704853cb63f253eea009390c88e7131c67e66a0a02099a8c917cb/pywin32-ctypes-0.2.3.tar.gz", "sha256": "d162dc04946d704503b2edc4d55f3dba5c1d539ead017afa00142c38b9885755"},
+      "wheels": {"any": {"url": "https://files.pythonhosted.org/packages/de/3d/8161f7711c017e01ac9f008dfddd9410dff3674334c233bde66e7ba65bbf/pywin32_ctypes-0.2.3-py3-none-any.whl", "sha256": "8a1513379d709975552d202d942d9837758905c8d01eb82b8bcc30918929e7b8"}}
+    }
+  ],
+  "ejs_dependencies": [
+    {"name": "astring", "version": "1.9.0", "commit": "96dfb2b347fc7e4f359b26579198097b9f0b1256", "url": "https://codeload.github.com/davidbonnet/astring/tar.gz/96dfb2b347fc7e4f359b26579198097b9f0b1256", "filename": "astring-1.9.0-source.tar.gz", "sha256": "cc907fe097a83c529235823820c787b1112d77c6ff216cae5fe17b14e5524fd5"},
+    {"name": "meriyah", "version": "6.1.4", "commit": "abbbfe0c4e4d52649716028a4416bd0fe6644e57", "url": "https://codeload.github.com/meriyah/meriyah/tar.gz/abbbfe0c4e4d52649716028a4416bd0fe6644e57", "filename": "meriyah-6.1.4-source.tar.gz", "sha256": "addecf994d152cfdfbe0acf492ce9a51aa16220ace76a5538de17d1cee46b2d1"}
+  ],
+  "mpl": {"url": "https://www.mozilla.org/media/MPL/2.0/index.f75d2927d3c1.txt", "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04"},
+  "windows_python": {
+    "version": "3.13.17",
+    "binary": {"url": "https://www.python.org/ftp/python/3.13.17/python-3.13.17-amd64.zip", "sha256": "b26ca4b4ee51e157836049934d2b8eabd55939be296f3130254251b6df96ec2f"},
+    "spdx": {"url": "https://www.python.org/ftp/python/3.13.17/python-3.13.17-amd64.exe.spdx.json", "sha256": "bf9155bdb18592b967382b9698a520cbe8e02853de9de04e9851f5abd1154593"},
+    "source_spdx": {"url": "https://www.python.org/ftp/python/3.13.17/Python-3.13.17.tar.xz.spdx.json", "sha256": "84b5a983bc52fc97ce26a080e3061a14bb9f1d2f3e0708b29b236bcafd0a44da"}
+  },
+  "linux_sdks": [
+    {
+      "sdk": "org.gnome.Sdk/x86_64/50",
+      "sdk_commit": "dfa2bb30bac0d2c93f357e8f17f1ce94baeda5d681f2c94cde291f592b907d15",
+      "manifest_sha256": "dc03350158db302f3ae397e29284511ed9157d27696973e4bb0cb4fcc9d521fc",
+      "python_version": "3.13.16",
+      "source_spdx": {"url": "https://www.python.org/ftp/python/3.13.16/Python-3.13.16.tar.xz.spdx.json", "sha256": "1fad51778029eaa69cd44ba113ad0050420fd65f47d5385b7b942ac1f260f123"},
+      "recipes": [
+        {"name": "gnome-build-meta", "commit": "14889abb2b533ece80e0916de8751efe03ddab33", "url": "https://codeload.github.com/GNOME/gnome-build-meta/tar.gz/14889abb2b533ece80e0916de8751efe03ddab33", "filename": "gnome-build-meta-14889abb2b533ece80e0916de8751efe03ddab33.tar.gz", "sha256": "78564526ff4def7573ae8119b9dee7c13d24f601ee5ff5f2bba15666ffe50e0b"},
+        {"name": "freedesktop-sdk", "commit": "a32cb6d7b91a8e6089224119457d5cb40d17e1a5", "url": "https://gitlab.com/freedesktop-sdk/freedesktop-sdk/-/archive/a32cb6d7b91a8e6089224119457d5cb40d17e1a5/freedesktop-sdk-a32cb6d7b91a8e6089224119457d5cb40d17e1a5.tar.gz", "sha256": "b3d1dc2aa9d52c94025dfb3a8e5b9b91951aebba72435aa944d19fcb3929f759"}
+      ]
+    }
+  ]
+}

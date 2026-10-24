@@ -1,5 +1,11 @@
 {
-  "schema": 1,
+  "schema": 2,
+  "release": {
+    "yt-dlp": {"version": "2026.10.21", "distribution": "custom minimal standalone", "builder": "scripts/build_downloader.py", "lock": "packaging/tools/downloader-lock.json"},
+    "ffmpeg": {"version": "8.1.3", "distribution": "native source build with x264 and dav1d", "builder": "scripts/build_media_tools.py", "lock": "packaging/tools/media-lock.json"},
+    "deno": {"version": "2.9.8", "distribution": "official upstream binary with collected source materials", "collector": "scripts/collect_deno_materials.py", "lock": "packaging/tools/deno-materials-lock.json"}
+  },
+  "components_usage": "yt-dlp and FFmpeg assets below are development-only; release uses native builders. Deno assets are used by both modes.",
   "verified_on": "2026-10-24",
   "checksum_provenance": "GitHub release asset SHA256 digests from the upstream repositories' release APIs; notice hashes computed from upstream tag URLs.",
   "components": {

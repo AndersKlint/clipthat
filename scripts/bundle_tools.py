@@ -5,6 +5,7 @@ import json
 from pathlib import Path, PurePosixPath
 import shutil
 import stat
+import subprocess
 import tarfile
 import tempfile
 import urllib.error
@@ -17,7 +18,6 @@ LOCK_PATH = ROOT / "packaging/tools/lock.json"
 MAX_DOWNLOAD = 512 * 1024 * 1024
 MAX_EXPANDED = 2 * 1024 * 1024 * 1024
 MAX_ENTRIES = 20000
-ATTESTATION = "exact-corresponding-sources-including-dependencies-and-build-scripts"
 
 
 def digest(path):
@@ -44,46 +44,6 @@ def safe_name(value):
             *(f"LPT{i}" for i in range(1, 10))} for p in path.parts):
         raise ValueError(f"Nonportable path: {value!r}")
     return path
-
-
-def input_file(directory, record):
-    relative = safe_name(record["path"])
-    path = directory.joinpath(*relative.parts)
-    if any(p.is_symlink() for p in [path, *path.parents]):
-        raise ValueError(f"Source input must not be a symlink: {path}")
-    if not path.is_file() or path.stat().st_size == 0:
-        raise ValueError(f"Missing or empty source input: {path}")
-    if digest(path) != record["sha256"]:
-        raise ValueError(f"Source input SHA256 mismatch: {path}")
-    return path
-
-
-def validate_sources(directory, platform, lock):
-    if directory is None:
-        raise ValueError("Release bundling requires --sources-dir; see packaging/tools/README.md")
-    directory = directory.absolute()
-    if (directory / "sources.json").is_symlink():
-        raise ValueError("sources.json must not be a symlink")
-    manifest = json.loads((directory / "sources.json").read_text(encoding="utf-8"))
-    if manifest["schema"] != 1 or manifest["platform"] != platform:
-        raise ValueError("sources.json schema/platform does not match this bundle")
-    if set(manifest["components"]) != set(lock["components"]):
-        raise ValueError("sources.json must declare exactly yt-dlp, ffmpeg and deno")
-    for name, component in lock["components"].items():
-        entry = manifest["components"][name]
-        if (entry["version"] != component["version"] or
-                entry["binary_sha256"] != component["assets"][platform]["sha256"] or
-                entry["attestation"] != ATTESTATION):
-            raise ValueError(f"Source declaration does not match locked {name} binary")
-        if not entry["archives"] or not entry["notices"]:
-            raise ValueError(f"{name}: source archives and complete dependency notices are required")
-        for record in [*entry["archives"], *entry["notices"], entry["compliance_notes"]]:
-            if str(safe_name(record["path"])).casefold() == "sources.json":
-                raise ValueError("sources.json is a reserved source input path")
-            path = input_file(directory, record)
-            if record in entry["archives"] and not (zipfile.is_zipfile(path) or tarfile.is_tarfile(path)):
-                raise ValueError(f"Source input is not a ZIP or tar archive: {path}")
-    return manifest
 
 
 def download(record, target, limit=MAX_DOWNLOAD):
@@ -169,33 +129,14 @@ def extract_binaries(archive, asset, destination):
         raise ValueError(f"Archive missing executables: {set(expected) - found}")
 
 
-def copy_sources(directory, manifest, source_target, license_target):
-    source_target.mkdir()
-    write_json(source_target / "sources.json", manifest)
-    copied = {}
-    for name, entry in manifest["components"].items():
-        for record in [*entry["archives"], *entry["notices"], entry["compliance_notes"]]:
-            relative = safe_name(record["path"])
-            target = source_target.joinpath(*relative.parts)
-            if str(relative).casefold() in copied:
-                if copied[str(relative).casefold()] != record:
-                    raise ValueError(f"Conflicting source paths: {relative}")
-                continue
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with input_file(directory.absolute(), record).open("rb") as src, target.open("xb") as dst:
-                shutil.copyfileobj(src, dst)
-            if digest(target) != record["sha256"]:
-                raise ValueError(f"Source input changed while copying: {relative}")
-            copied[str(relative).casefold()] = record
-        notices = license_target / name / "prepared"
-        notices.mkdir(parents=True)
-        for index, record in enumerate([*entry["notices"], entry["compliance_notes"]]):
-            shutil.copyfile(source_target / record["path"], notices / f"{index}-{Path(record['path']).name}")
+def bundle(platform, destination, prepared_tools=None, development=False, deno_materials=None):
+    from prepare_release_tools import link_or_copy, prepare, validate_prepared
 
-
-def bundle(platform, destination, sources_dir=None, development=False):
     lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
-    sources = validate_sources(sources_dir, platform, lock) if sources_dir or not development else None
+    if development and (prepared_tools is not None or deno_materials is not None):
+        raise ValueError("--development cannot be combined with release inputs")
+    if prepared_tools is not None and deno_materials is not None:
+        raise ValueError("--deno-materials is only used when generating prepared tools")
     destination = destination.absolute()
     if not destination.is_dir() or destination.is_symlink():
         raise ValueError("--destination must be an existing Flutter bundle directory, not a symlink")
@@ -210,15 +151,43 @@ def bundle(platform, destination, sources_dir=None, development=False):
         licenses = stage / "licenses"
         tools.mkdir()
         licenses.mkdir()
-        if sources:
-            copy_sources(sources_dir, sources, stage / "tool-sources", licenses)
+        if not development:
+            if prepared_tools is None:
+                prepared_tools = stage / "prepared"
+                prepare(platform, prepared_tools, deno_materials)
+            manifest = validate_prepared(prepared_tools, platform)
+            for source, target in [(prepared_tools / "tools", tools),
+                                   (prepared_tools / "licenses/tools", licenses),
+                                   (prepared_tools / "tool-sources", stage / "tool-sources")]:
+                shutil.copytree(source, target, dirs_exist_ok=True, copy_function=link_or_copy)
+            for record in manifest["payload"]:
+                relative = record["path"]
+                target = (licenses / relative.removeprefix("licenses/tools/")
+                          if relative.startswith("licenses/tools/") else stage / relative)
+                if digest(target) != record["sha256"]:
+                    raise ValueError(f"Prepared payload changed while staging: {relative}")
+            (tools / "manifest.json").unlink()
+            write_json(tools / "manifest.json", manifest)
+            (destination / "licenses").mkdir(exist_ok=True)
+            installed = []
+            try:
+                for source, target in [(tools, paths[0]), (licenses, paths[1]),
+                                       (stage / "tool-sources", paths[2])]:
+                    if target.exists() or target.is_symlink():
+                        raise ValueError(f"Destination appeared during staging: {target}")
+                    source.rename(target)
+                    installed.append(target)
+            except BaseException:
+                for target in reversed(installed):
+                    shutil.rmtree(target)
+                raise
+            return manifest
         manifest = {
             "schema": 1, "platform": platform,
             "development": development, "redistributable": not development,
             "created_utc": datetime.now(timezone.utc).isoformat(),
             "lock_sha256": digest(LOCK_PATH), "lock": lock,
             "bundler_sha256": digest(Path(__file__)),
-            "sources_manifest_sha256": digest(stage / "tool-sources/sources.json") if sources else None,
             "components": {},
         }
         for name, component in lock["components"].items():
@@ -244,8 +213,7 @@ def bundle(platform, destination, sources_dir=None, development=False):
         installed = []
         try:
             (destination / "licenses").mkdir(exist_ok=True)
-            for src, target in [(tools, paths[0]), (licenses, paths[1]),
-                                *([(stage / "tool-sources", paths[2])] if sources else [])]:
+            for src, target in [(tools, paths[0]), (licenses, paths[1])]:
                 if target.exists() or target.is_symlink():
                     raise ValueError(f"Destination appeared during staging: {target}")
                 target.mkdir()
@@ -263,13 +231,16 @@ def main():
     parser = argparse.ArgumentParser(description="Stage pinned offline tools beside a Flutter executable.")
     parser.add_argument("--platform", required=True, choices=("linux-x64", "windows-x64"))
     parser.add_argument("--destination", required=True, type=Path)
-    parser.add_argument("--sources-dir", type=Path, help="Matching sources.json, source archives, notices and compliance notes")
-    parser.add_argument("--development", action="store_true", help="Allow missing sources; mark bundle non-redistributable")
+    parser.add_argument("--prepared-tools", type=Path)
+    parser.add_argument("--deno-materials", type=Path)
+    parser.add_argument("--development", action="store_true", help="Stage pinned upstream prebuilt tools; mark bundle non-redistributable")
     args = parser.parse_args()
     try:
-        bundle(args.platform, args.destination, args.sources_dir, args.development)
+        bundle(args.platform, args.destination, args.prepared_tools, args.development, args.deno_materials)
     except PermissionError as error:
         parser.exit(1, f"Permission denied: {error.filename}. Whitelist its directory via nano ~/.config/firejail/strict-dev.profile\n")
+    except subprocess.SubprocessError as error:
+        parser.exit(1, f"Native tool preparation failed: {error}\n")
     except (OSError, ValueError, KeyError, TypeError, tarfile.TarError, zipfile.BadZipFile, urllib.error.URLError) as error:
         parser.exit(1, f"Bundling failed: {error}\n")
 

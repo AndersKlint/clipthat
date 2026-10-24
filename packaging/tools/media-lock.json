@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "verified_on": "2026-10-24",
+  "checksum_provenance": "SHA256 computed from these exact upstream HTTPS downloads; dav1d also matches its upstream SHA256 file. Maintainer signatures were not independently verified.",
+  "components": {
+    "ffmpeg": {
+      "version": "8.1.3",
+      "url": "https://ffmpeg.org/releases/ffmpeg-8.1.3.tar.xz",
+      "sha256": "7138d28c96d9d3e3af4ee3d8cad72741f8ffb40da90c1112235dea3ecd3178a3",
+      "archive": "ffmpeg-8.1.3.tar.xz",
+      "root": "ffmpeg-8.1.3",
+      "role": "shipped executable and static libraries",
+      "notices": ["COPYING.GPLv2", "COPYING.GPLv3", "COPYING.LGPLv2.1", "COPYING.LGPLv3", "LICENSE.md"]
+    },
+    "x264": {
+      "version": "164-c24e06c2e184345ceb33eb20a15d1024d9fd3497",
+      "url": "https://code.videolan.org/videolan/x264/-/archive/c24e06c2e184345ceb33eb20a15d1024d9fd3497/x264-c24e06c2e184345ceb33eb20a15d1024d9fd3497.tar.bz2",
+      "sha256": "5e29c8ae6cf5e192d552db7c4f7cd2c797bc57eba47cb938290a1665159cacae",
+      "archive": "x264-c24e06c2e184345ceb33eb20a15d1024d9fd3497.tar.bz2",
+      "root": "x264-c24e06c2e184345ceb33eb20a15d1024d9fd3497",
+      "role": "statically linked H.264 encoder",
+      "notices": ["COPYING"]
+    },
+    "dav1d": {
+      "version": "1.5.4",
+      "url": "https://download.videolan.org/pub/videolan/dav1d/1.5.4/dav1d-1.5.4.tar.xz",
+      "sha256": "686616b7c69eb88d44459391ab25cac13b6647a3b288835c5784e71c1514a5c5",
+      "archive": "dav1d-1.5.4.tar.xz",
+      "root": "dav1d-1.5.4",
+      "role": "statically linked CPU AV1 decoder",
+      "notices": ["COPYING"]
+    },
+    "nasm": {
+      "version": "2.16.03",
+      "url": "https://www.nasm.us/pub/nasm/releasebuilds/2.16.03/nasm-2.16.03.tar.xz",
+      "sha256": "1412a1c760bbd05db026b6c0d1657affd6631cd0a63cddb6f73cc6d4aa616148",
+      "archive": "nasm-2.16.03.tar.xz",
+      "root": "nasm-2.16.03",
+      "role": "build-time assembler only; not shipped in bin",
+      "notices": ["LICENSE"]
+    }
+  },
+  "windows_runtime_notices": [
+    {
+      "name": "COPYING3",
+      "url": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/COPYING3",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+    },
+    {
+      "name": "COPYING.RUNTIME",
+      "url": "https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-14.2.0/COPYING.RUNTIME",
+      "sha256": "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
+    }
+  ]
+}

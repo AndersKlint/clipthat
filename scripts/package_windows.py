@@ -12,7 +12,8 @@ import tarfile
 import tempfile
 import zipfile
 
-from bundle_tools import LOCK_PATH, ROOT, bundle, digest, validate_sources, write_json
+from bundle_tools import LOCK_PATH, ROOT, bundle, digest, write_json
+from prepare_release_tools import preflight
 
 
 def run(arguments, timeout=60):
@@ -58,16 +59,16 @@ def verify_tools(directory):
     return versions
 
 
-def package(sources_dir, output_dir):
+def package(output_dir, prepared_tools=None, deno_materials=None):
     if os.name != "nt" or platform.machine().lower() not in ("amd64", "x86_64") or struct.calcsize("P") != 8:
         raise ValueError("Run this script on Windows x64 with 64-bit Python; cross-compilation is unsupported")
-    flutter = shutil.which("flutter")
+    flutter = shutil.which("flutter.bat")
     git = shutil.which("git")
     if not flutter or not git:
         raise ValueError("Flutter's Windows SDK and Git must be installed and available on PATH")
-    lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
-    validate_sources(sources_dir, "windows-x64", lock)
     output_dir = output_dir.absolute()
+    if prepared_tools is None:
+        preflight("windows-x64", output_dir)
     if output_dir.is_symlink():
         raise ValueError("Output directory must not be a symlink")
     targets = [output_dir / filename for filename in
@@ -91,11 +92,16 @@ def package(sources_dir, output_dir):
             raise ValueError(f"Flutter executable missing: {built / 'yt_section_downloader.exe'}")
         portable = stage / "portable"
         shutil.copytree(built, portable)
-        manifest = bundle("windows-x64", portable, sources_dir)
+        manifest = bundle("windows-x64", portable, prepared_tools=prepared_tools, deno_materials=deno_materials)
         versions = verify_tools(portable)
         source_stage = stage / "sources"
         source_stage.mkdir()
         shutil.move(str(portable / "tool-sources"), str(source_stage / "tool-sources"))
+        manifest["source_distribution"] = {
+            "artifact": targets[1].name, "location": "ClipThat-sources/tool-sources/",
+            "manifest": "ClipThat-sources/tool-sources/manifest.json",
+        }
+        write_json(portable / "tools/manifest.json", manifest)
         run([git, "archive", "--format=zip", f"--output={source_stage / 'application.zip'}", revision])
         provenance = {
             "schema": 1, "application": "ClipThat!", "studio": "Dr. Jetski Studios",
@@ -116,9 +122,14 @@ def package(sources_dir, output_dir):
         write_json(source_stage / "release.json", provenance)
         shutil.copyfile(LOCK_PATH, source_stage / "tool-lock.json")
         shutil.copyfile(ROOT / "packaging/tools/README.md", source_stage / "SOURCE-COMPLIANCE.md")
+        require_clean_tree(git)
+        if run([git, "rev-parse", "HEAD"]) != revision:
+            raise ValueError("Application sources changed during release packaging")
         for name, directory, prefix in [(targets[0].name, portable, "ClipThat"),
                                         (targets[1].name, source_stage, "ClipThat-sources")]:
             zip_directory(directory, stage / name, prefix)
+            if (stage / name).stat().st_size >= 2 * 1024**3:
+                raise ValueError(f"Release asset must be smaller than 2 GiB: {name}")
         (stage / "SHA256SUMS").write_text(
             "".join(f"{digest(stage / target.name)}  {target.name}\n" for target in targets[:2]),
             encoding="utf-8")
@@ -137,11 +148,12 @@ def package(sources_dir, output_dir):
 
 def main():
     parser = argparse.ArgumentParser(description="Build and package ClipThat! Windows x64 with matching source distribution.")
-    parser.add_argument("--sources-dir", required=True, type=Path, help="Prepared matching sources.json and archives; see packaging/tools/README.md")
+    parser.add_argument("--prepared-tools", type=Path)
+    parser.add_argument("--deno-materials", type=Path)
     parser.add_argument("--output-dir", type=Path, default=ROOT / "dist/windows-x64", help="Directory for portable ZIP, source ZIP and SHA256SUMS")
     args = parser.parse_args()
     try:
-        package(args.sources_dir, args.output_dir)
+        package(args.output_dir, args.prepared_tools, args.deno_materials)
     except PermissionError as error:
         parser.exit(1, f"Permission denied: {error.filename}. Whitelist its directory via nano ~/.config/firejail/strict-dev.profile\n")
     except subprocess.CalledProcessError as error:

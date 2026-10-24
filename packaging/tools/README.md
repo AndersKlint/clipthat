@@ -1,233 +1,93 @@
 # Bundled tool preparation
 
-Requires Python 3.10+ and network access at packaging time. Only the Python standard
-library is used. No tool is downloaded by the application. The resulting layout is:
+The application uses adjacent `tools/yt-dlp`, `ffmpeg`, `ffprobe`, and `deno` (`.exe` on Windows). It passes bundled FFmpeg/Deno paths explicitly, disables user configuration, plugins, remote EJS, and updates, and never downloads tools at runtime or falls back to PATH.
 
-```text
-<Flutter bundle>/
-  yt_section_downloader[.exe]
-  tools/
-    yt-dlp[.exe]
-    ffmpeg[.exe]
-    ffprobe[.exe]
-    deno[.exe]
-    manifest.json
-  licenses/tools/
-    lock.json
-    BUNDLING.md
-    <component>/...
-  tool-sources/
-    sources.json
-    <prepared source archives, notices and compliance notes>
-```
+## Automatic release pipeline
 
-The runtime must resolve these four tools relative to the application executable.
-It must explicitly give yt-dlp the bundled FFmpeg directory and Deno executable,
-disable user configuration and automatic updates, and never fall back to PATH or
-fetch EJS remotely. Official standalone yt-dlp assets include Python and EJS.
-The extensionless `yt-dlp` upstream asset is not standalone and is not used.
+`scripts/prepare_release_tools.py` builds native release tools and collects Deno materials. `scripts/package_flatpak.py` and `scripts/package_windows.py` invoke it automatically; `make installer` selects the host packager without source inputs.
 
-## Commands
+| Release component | Inputs and method |
+| --- | --- |
+| FFmpeg + FFprobe **8.1.3** | `media-lock.json`, `scripts/build_media_tools.py`, and `build-media.sh`; native GCC build with static x264 revision `c24e06c2e184345ceb33eb20a15d1024d9fd3497` and dav1d **1.5.4**, using source-built NASM **2.16.03** at build time only |
+| yt-dlp **2026.10.21** | `downloader-lock.json`, `scripts/build_downloader.py`, and `downloader.spec`; custom minimal PyInstaller **6.22.0** standalone with Python, unchanged official **yt-dlp-ejs 0.8.0**, and **certifi 2026.10.19** |
+| Deno **2.9.8** | Official x64 binary pinned in `lock.json`; `deno-materials-lock.json` and `scripts/collect_deno_materials.py` collect matching declared source/dependency and license materials |
+
+`lock.json` separates release builders/collector from development-only upstream yt-dlp and BtbN media assets. Downloads use pinned HTTPS URLs and SHA256 checks; Git snapshots are commit-verified and hashed after creation. This records provenance, not independent maintainer-signature verification.
+
+Media builds disable autodetection and networking, enable only local `file`/`pipe` protocols, and retain H.264/AAC/VTT encoding plus the decoders needed for the supported YouTube workflow, including AV1 through dav1d. The recipe enables GPLv3 and libx264, not nonfree fdk-aac. Build output checks cover encoders, decoders, protocols, and native runtime imports. Source archives, recipes, configuration, command logs, toolchain versions, and notices are retained.
+
+The downloader freezes a locked minimal package set rather than redistributing the upstream combined standalone. EJS data is checked against yt-dlp's solver version/hashes; certifi CA data and editable source are retained. Python modules and native libraries are inventoried and mapped to official Windows Python inputs or the locked Linux SDK manifest and recipes. Unknown collected libraries or an unmapped SDK profile fail preparation.
+
+### Native environments
+
+- **Linux x64:** run preparation with `/usr/bin/python3` **inside GNOME SDK 50**. `downloader-lock.json` pins the SDK commit, manifest hash, interpreter, and GNOME/freedesktop recipe revisions. The current profile uses **CPython 3.13.16**. `make flatpak-setup` reads the commit from that lock and installs/pins it; a floating SDK update is not a substitute. GCC/G++, Make, Meson, Ninja, pkg-config, binutils, Bash, Perl, and Git must be available. The Flatpak packager builds both app and tools in this environment.
+- **Windows x64:** official **CPython 3.13.17 x64**, launched from **MSYS2 UCRT64**, with UCRT64 GCC, Meson, Ninja, pkgconf, binutils, Make, Perl, diffutils, coreutils, Bash, and Git. The builder verifies collected Python binaries against the official archive. Flutter also requires Visual Studio's desktop C++ workload and Windows SDK. See [Windows instructions](../windows/README.md).
+
+Windows Python tracks the latest official 3.13 patch with matching binaries and SPDX: [3.13.17](https://www.python.org/downloads/release/python-31317/) (2026-10-21), listed in the [official Windows catalog](https://www.python.org/downloads/windows/). The lock hashes the full `python-3.13.17-amd64.zip` archive (not the embeddable ZIP), Windows installer SPDX, and source-tarball SPDX from [python.org](https://www.python.org/ftp/python/3.13.17/). The builder verifies their SHA256 values, collects sources using SPDX checksums, and checks frozen native binaries against that archive. Keep the workflow interpreter pin and lock synchronized. Linux retains its independently locked SDK Python 3.13.16 profile.
+
+Use fresh native work paths without whitespace or shell/make metacharacters. No cross-compilation path is supported for release preparation.
+
+### Internal reusable staging
+
+Normal release commands are in [the root README](../../README.md#release-packaging). For separate preparation inside the appropriate native environment:
 
 ```sh
-python3 scripts/bundle_tools.py --help
-python3 scripts/bundle_tools.py --platform linux-x64 --destination build/linux/x64/release/bundle --sources-dir release-sources/linux-x64
-python3 scripts/bundle_tools.py --platform windows-x64 --destination build/windows/x64/runner/Release --sources-dir release-sources/windows-x64
+python scripts/prepare_release_tools.py --platform windows-x64 --destination C:/clipthat-work/prepared
+python scripts/bundle_tools.py --platform windows-x64 --destination build/windows/x64/runner/Release --prepared-tools C:/clipthat-work/prepared
+```
+
+The same orchestrator accepts `--platform linux-x64` **inside the locked SDK**. `--destination` for preparation must be absent; direct bundling requires an existing Flutter bundle without `tools/`, `licenses/tools/`, or `tool-sources/`. `--prepared-tools` is an internal reusable stage accepted by the bundler and Windows packager. It validates platform, all builder-lock fingerprints, payload inventory/hashes, executable set, and evidence. The Flatpak packager always prepares tools inside its SDK build; it does not accept this option.
+
+Deno collection can be reused independently on either platform, with **Python 3.11+** and Git:
+
+```sh
+python3 scripts/collect_deno_materials.py --destination build/deno-materials
+python3 scripts/collect_deno_materials.py --destination build/deno-materials --resume
+```
+
+Use `--resume` only for an existing collector destination; cached downloads are verified. The orchestrator, bundler, and both platform packagers accept `--deno-materials` to reuse a completed collection matching current locks. It cannot be combined with development mode, or with `--prepared-tools` in the bundler. Collection gaps/errors, incomplete status, or changed files fail release validation.
+
+## Materials and source obligations
+
+The Deno collector covers the release source's entire root Cargo lock graph, including dev/unused/other-target packages; crate checksums and license declarations; native rusty_v8/V8 sources and recursive gitlinks; Rust **1.95.0** standard-library sources and its Cargo lock dependencies; attributed legal files/source notices; supplemental repository notices; and pinned canonical SPDX texts. It records license alternatives and MPL source mappings. The result is a **provenance superset**, not an exact link map of the official binary.
+
+Observed completed collection: about **1.41 GiB uncompressed**, **1,102 archives**, and **80,185 manifest notice records**, with roughly **81k filesystem notice files**. Record counts and filesystem counts differ; budget space and inodes for both retained material and copied notice trees. Package sizes are measured separately, and packagers fail if a binary/source asset is **2 GiB or larger**.
+
+Apply obligations by license and distributed component:
+
+- **Media:** ship corresponding sources for the GPL FFmpeg/x264 build and linked dav1d, with matching configuration and build/install recipes. NASM sources are retained as build provenance; NASM itself is not shipped as a runtime tool. General-purpose build tools and qualifying system libraries are treated separately under the applicable license provisions.
+- **Custom yt-dlp:** the core is Unlicense; official EJS includes Unlicense/MIT/ISC material. PyInstaller's bootloader exception permits freezing applications without automatically imposing the upstream combined standalone's GPLv3 classification. Preserve the exception and component notices. Certifi's MPL-2.0 source obligations are covered by its retained matching source, including `cacert.pem`. Python/native dependency notices and sources, and build-time package sources, are collected with the build map.
+- **Deno:** preserve applicable third-party attribution, license, and NOTICE material and provide source where a component's license requires it, such as MPL-covered files. **MIT dependencies do not generally require source distribution merely because they use MIT.** Collecting all declared crate/native/Rust material is a provenance policy broader than those legal obligations.
+
+The official Deno binaries lack a complete published link map. The v8 crate records a dirty checkout; its published checksum identifies the crate, while the recorded revision/gitlinks anchor supplemental native materials. These limitations remain in `materials.json`. Collection flags and manifest validation describe mechanical coverage/integrity, **not legal certification, a generic all-source attestation, or proof of bit-for-bit rebuild equivalence**. Review the recorded source-to-binary mapping, notices, and license-specific obligations before distribution.
+
+### Prepared layout and release outputs
+
+```text
+<prepared stage>/
+  tools/{yt-dlp,ffmpeg,ffprobe,deno}[.exe]
+  tools/manifest.json
+  licenses/tools/{yt-dlp,ffmpeg,deno}/...
+  tool-sources/manifest.json
+  tool-sources/yt-dlp/{build.json,sources/,inputs/,recipe/,notices/,...}
+  tool-sources/ffmpeg/{build.json,sources/,notices/,...}
+  tool-sources/deno/{materials.json,sources/,notices/,...}
+  tool-sources/integration/...
+```
+
+The release tool manifest uses schema 2, records native-build or official-asset origins, lock fingerprints, and a hashed payload inventory. Packaging moves `tool-sources/` into the sibling source archive, retains runtime notices, and updates the runtime manifest's source-distribution pointer.
+
+| Native packager | Local output |
+| --- | --- |
+| Linux | `ClipThat-linux-x64.flatpak`, `ClipThat-linux-x64-sources.tar.gz`, retained `repo/` |
+| Windows | `ClipThat-windows-x64.zip`, `ClipThat-windows-x64-sources.zip`, `SHA256SUMS` |
+
+Source archives contain `ClipThat-sources/`, the exact Git application archive (`application.tar` on Linux, `application.zip` on Windows), `tool-sources/`, and `release.json` provenance. CI supplies `SHA256SUMS-linux-x64` and names Windows checksums `SHA256SUMS-windows-x64`. Publish each complete platform set together and retain matching sources at the release location. See [release workflows](../../README.md#github-release-workflows) for existing-tag validation and token permissions. CI builds and collects inputs automatically without user-provided source URL/hash variables.
+
+## Fast development bundling
+
+```sh
 python3 scripts/bundle_tools.py --platform linux-x64 --destination build/linux/x64/release/bundle --development
 ```
 
-The destination must already exist. Existing `tools/`, `licenses/tools/`, or
-`tool-sources/` are refused, including symlinks. Use a freshly built/copied bundle
-for each invocation. Downloads and staging are temporary; there is no shared
-cache. Downloads are SHA256-checked before processing. Archive paths, file types,
-duplicate names, entry counts, expanded sizes and selected executable locations
-are checked; archives are never extracted wholesale. Linux binaries receive 0755
-permissions. Staging may target either platform from either host without running
-the downloaded binaries. This does not change their native runtime requirements.
-
-Release is the default. `--development` allows absent source inputs and always
-marks the tool manifest `development: true, redistributable: false`. Such bundles
-are for local development only, with potentially incomplete dependency notices.
-The Windows release command has no development bypass.
-
-## Locked upstream provenance
-
-`lock.json` pins the exact release URLs and SHA256 digests returned by upstream
-GitHub release APIs on 2026-10-24. Notice hashes were computed from the listed
-upstream tag URLs. This is HTTPS/upstream-digest verification, not independent
-maintainer-signature verification. No floating `latest` download URLs are used.
-
-| Component | Pin | Distribution |
-| --- | --- | --- |
-| yt-dlp | 2026.10.21 | Official PyInstaller standalone x64, Python + EJS included |
-| FFmpeg + FFprobe | n8.1.3-9-g29e619e767 | BtbN `autobuild-2026-09-30-13-08`, static `gpl`, release branch 8.1 |
-| Deno | 2.9.8 | Official x86_64 GNU/Linux or Windows MSVC ZIP |
-
-The FFmpeg `gpl` variant includes libx264; AAC is FFmpeg's native encoder, not
-non-redistributable fdk-aac. The Windows packager checks the actual encoder list
-and build configuration. Shared cross-host staging does not execute binaries.
-BtbN documents Linux glibc >= 2.28, kernel >= 4.18, and Windows 10 22H2 as its
-minimum supported baseline. Other bundled components may impose further limits.
-BtbN retains monthly final builds for two years; archive these exact assets for
-release reproducibility before their removal. There is no unverified mirror or
-silent upgrade fallback. Source references in the lock are useful starting points,
-not complete source-distribution claims.
-
-## Required corresponding source inputs
-
-Automating complete source recovery for these prebuilt distributions is not
-implemented. Release packaging therefore **requires user-prepared exact matching
-source archives and compliance notes**. A URL to FFmpeg or yt-dlp core alone is
-insufficient. Prepare a separate directory for each target, containing
-`sources.json` and all referenced files. Files must be nonempty regular files
-inside that directory, without symlink paths. SHA256 is checked before staging
-and again after copying. Archives must be recognizable ZIP or tar archives; they
-are copied intact, not unpacked or treated as verified source content.
-
-Use this schema, repeating the component entry for `ffmpeg` and `deno`, with
-their exact versions and target asset hashes from `lock.json`:
-
-```json
-{
-  "schema": 1,
-  "platform": "windows-x64",
-  "components": {
-    "yt-dlp": {
-      "version": "2026.10.21",
-      "binary_sha256": "COPY_EXACT_TARGET_ASSET_SHA256_FROM_LOCK",
-      "attestation": "exact-corresponding-sources-including-dependencies-and-build-scripts",
-      "archives": [
-        {"path": "yt-dlp/corresponding-source.tar.xz", "sha256": "COMPUTED_SHA256"}
-      ],
-      "notices": [
-        {"path": "yt-dlp/COMPLETE-NOTICES.txt", "sha256": "COMPUTED_SHA256"}
-      ],
-      "compliance_notes": {"path": "yt-dlp/COMPLIANCE.md", "sha256": "COMPUTED_SHA256"}
-    }
-  }
-}
-```
-
-The uppercase values are placeholders, not usable checksums. Multiple archives
-and notice files are supported per component. Paths must be portable relative
-paths using `/`. Do not name an input `sources.json`, which is reserved for the
-copied manifest. Compute each file hash, for example:
-
-```sh
-python3 -c "import hashlib,pathlib; print(hashlib.file_digest(pathlib.Path('archive.tar.xz').open('rb'),'sha256').hexdigest())"
-```
-
-That convenience command requires Python 3.11+. With Python 3.10 use
-`hashlib.sha256(pathlib.Path('archive.tar.xz').read_bytes()).hexdigest()` instead.
-
-For every component, the preparer must supply:
-
-* The preferred form for modification of the **exact shipped binary**, including
-  all relevant bundled/linked dependencies, local changes, generated-code inputs,
-  patches, configuration, and scripts controlling compilation and installation.
-* A dependency inventory with exact versions/commits and source-to-binary mapping,
-  plus original copyright, attribution, license, and NOTICE texts required by each
-  dependency. Include full applicable GPL texts, not just license identifiers.
-* Compliance notes identifying the binary URL and SHA256, upstream build revision,
-  dependency revisions, build recipes/options/toolchain and preparation method;
-  explain the mapping from every archive to the binaries and attest completeness.
-
-In particular:
-
-* **FFmpeg/FFprobe:** include the exact FFmpeg revision and all linked library
-  sources, including x264 and every other enabled GPL/LGPL/permissive dependency
-  with redistribution obligations. Include the matching BtbN build scripts at
-  `6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b`, dependency revisions, patches,
-  configuration, generated inputs and build/install instructions. The build-script
-  repository alone does not contain all fetched dependency sources. Do not
-  substitute a newer FFmpeg release tarball or a generic x264 download link.
-* **Standalone yt-dlp:** the combined PyInstaller executable is GPLv3+, despite
-  the core being Unlicense. Include exact bundled Python, EJS (and its bundled
-  astring/meriyah), PyInstaller/bootloader, Python packages and native dependencies
-  and their applicable sources/notices, plus the actual standalone build recipe.
-  Use the upstream release workflow and build metadata to establish versions;
-  the core source archive does not establish these versions by itself.
-* **Deno:** provide the exact release source/dependency inventory and complete
-  license/notice texts for V8, Rust crates and other included components. Deno's
-  top-level MIT license alone is not a complete third-party notice collection.
-  Include sources required by those dependency licenses. This tooling requires a
-  source archive for Deno too, to keep each binary's provenance explicit.
-
-The script verifies declarations, target/version/binary binding, file presence,
-archive format and hashes; it **cannot prove legal or source completeness**. The
-explicit attestation records the preparer's responsibility, not an automated
-compliance certification. If matching source cannot be obtained, do not produce
-a release with these binaries. Obtain complete sources or deliberately change
-the locked build and provide matching sources for that build.
-
-The bundler includes the archives alongside the bundle under `tool-sources/`,
-copies prepared notices and compliance notes into `licenses/tools/<component>/`,
-and records the copied source manifest's hash in `tools/manifest.json`. Ship the
-entire corresponding source distribution with the binaries through the same
-release location; retain it for each published binary release. The Windows
-packager moves `tool-sources/` into the sibling source ZIP and names that ZIP in
-`release.json`. Never publish the portable ZIP without its matching source ZIP.
-
-## CI source archives
-
-Release CI uses Flutter **3.47.2** and Python **3.13**. Source preparation is
-manual: first populate and review separate `release-sources/windows-x64/` and
-`release-sources/linux-x64/` directories using the schema above. Each manifest
-must declare exactly `yt-dlp`, `ffmpeg`, and `deno`, bind their versions and
-target-specific binary hashes to `lock.json`, and include the exact attestation,
-nonempty archive and notice lists, and compliance notes. Include every referenced
-file with its declared hash. Do not substitute generic upstream source tarballs
-for complete corresponding sources of the shipped standalone builds.
-
-Package each prepared directory's **contents**, not the enclosing directory,
-into a ZIP or tar archive. For example, from the repository root with Python 3.13:
-
-```sh
-python -c "import shutil; shutil.make_archive('windows-tool-sources', 'zip', root_dir='release-sources/windows-x64')"
-python -c "import shutil; shutil.make_archive('linux-tool-sources', 'gztar', root_dir='release-sources/linux-x64')"
-python -c "import hashlib,pathlib; print(hashlib.file_digest(pathlib.Path('windows-tool-sources.zip').open('rb'), 'sha256').hexdigest())"
-python -c "import hashlib,pathlib; print(hashlib.file_digest(pathlib.Path('linux-tool-sources.tar.gz').open('rb'), 'sha256').hexdigest())"
-```
-
-The outer archives must have this layout (with the actual paths declared in each
-target's manifest):
-
-```text
-sources.json
-yt-dlp/corresponding-source.tar.xz
-yt-dlp/COMPLETE-NOTICES.txt
-yt-dlp/COMPLIANCE.md
-ffmpeg/...
-deno/...
-```
-
-Use regular files and directories, without symlinks or paths escaping the package.
-The hashes in `sources.json` cover the individual referenced files; the digest
-configured in GitHub covers the entire outer ZIP/tar download. Recompute both
-levels as appropriate whenever inputs change, including when tool pins change.
-
-Host each complete outer archive at a **public HTTPS URL**. In the repository's
-**Settings > Secrets and variables > Actions > Variables**, configure:
-
-| Repository variable | Prepared input |
-| --- | --- |
-| `WINDOWS_TOOL_SOURCES_URL` | Windows x64 outer archive's public HTTPS URL |
-| `WINDOWS_TOOL_SOURCES_SHA256` | SHA256 of that complete archive |
-| `LINUX_TOOL_SOURCES_URL` | Linux x64 outer archive's public HTTPS URL |
-| `LINUX_TOOL_SOURCES_SHA256` | SHA256 of that complete archive |
-
-Use repository variables, not secrets or embedded/base64 source material. Keep
-the hosted archives available for reproducibility. Each native workflow fails
-if its required variables are missing, the download or hash fails, or extracted
-inputs do not satisfy the release source schema. CI never uses `--development`.
-Validation cannot establish source completeness: **do not publish until the
-complete source-to-binary mapping has been reviewed**.
-
-The Windows workflow publishes the portable ZIP, matching source ZIP, and
-`SHA256SUMS-windows-x64`. The Linux workflow publishes the Flatpak, exact tagged
-application-source archive `ClipThat-linux-x64-app-source.tar.gz`, and
-`SHA256SUMS-linux-x64`; prepared tool sources and notices remain inside the
-Flatpak. Both upload Actions artifacts and assets to the same GitHub release.
-Actions retention is finite; release assets are the permanent distribution
-location until explicitly removed. See [release workflow setup](../../README.md#github-release-workflows)
-for token write permissions, version/tag validation, and trigger instructions.
+Development mode stages locked upstream prebuilt standalone yt-dlp, BtbN GPL FFmpeg/FFprobe, and official Deno, with limited notices and a schema-1 manifest marked `development: true, redistributable: false`. It avoids native release builds/material collection and is **non-redistributable**. Direct staging can target either platform without executing those binaries; that does not verify native compatibility. `make run` caches this development path by platform, lock hash, and bundler hash; the cache formula and development manifest schema are unchanged. Release preparation uses separate schema-2 manifests and never upgrades a development bundle into a release.

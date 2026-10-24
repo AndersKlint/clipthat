@@ -17,15 +17,13 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 240
     outputs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
       prerelease: ${{ steps.release.outputs.prerelease }}
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-      TOOL_SOURCES_URL: ${{ vars.LINUX_TOOL_SOURCES_URL }}
-      TOOL_SOURCES_SHA256: ${{ vars.LINUX_TOOL_SOURCES_SHA256 }}
     steps:
       - name: Check out release tag
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -47,18 +45,6 @@ jobs:
         run: |
           sudo rm -rf -- /usr/local/lib/android /usr/share/dotnet
           df -h .
-
-      - name: Fetch matching tool sources
-        shell: bash
-        run: |
-          set -euo pipefail
-          : "${TOOL_SOURCES_URL:?Set repository variable LINUX_TOOL_SOURCES_URL}"
-          : "${TOOL_SOURCES_SHA256:?Set repository variable LINUX_TOOL_SOURCES_SHA256}"
-          python scripts/release_ci.py fetch-sources \
-            --platform linux-x64 \
-            --url "$TOOL_SOURCES_URL" \
-            --sha256 "$TOOL_SOURCES_SHA256" \
-            --destination release-sources/linux-x64
 
       - name: Install Flatpak build prerequisites
         run: |
@@ -83,26 +69,23 @@ jobs:
           flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
           flatpak install --user --noninteractive -y --arch=x86_64 flathub \
             org.gnome.Platform//50 org.gnome.Sdk//50
+          sdk_commit="$(python -c "import json; from pathlib import Path; print(json.loads(Path('packaging/tools/downloader-lock.json').read_text(encoding='utf-8'))['linux_sdks'][0]['sdk_commit'])")"
+          flatpak update --user --commit="$sdk_commit" --noninteractive -y org.gnome.Sdk/x86_64/50
 
       - name: Fetch Flutter 3.47.2 SDK source
         run: git clone --depth 1 --branch 3.47.2 https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
 
       - name: Package inside GNOME SDK
+        timeout-minutes: 180
         run: |
           python scripts/package_flatpak.py \
             --flutter-sdk "$RUNNER_TEMP/flutter" \
-            --sources-dir release-sources/linux-x64 \
             --output-dir build/flatpak
-
-      - name: Archive application source
-        run: |
-          git archive --format=tar.gz --prefix=ClipThat/ \
-            --output=build/flatpak/ClipThat-linux-x64-app-source.tar.gz HEAD
 
       - name: Hash release assets
         working-directory: build/flatpak
         run: |
-          sha256sum ClipThat-linux-x64.flatpak ClipThat-linux-x64-app-source.tar.gz \
+          sha256sum ClipThat-linux-x64.flatpak ClipThat-linux-x64-sources.tar.gz \
             > SHA256SUMS-linux-x64
 
       - name: Upload Linux release artifact
@@ -114,7 +97,7 @@ jobs:
           compression-level: 0
           path: |
             build/flatpak/ClipThat-linux-x64.flatpak
-            build/flatpak/ClipThat-linux-x64-app-source.tar.gz
+            build/flatpak/ClipThat-linux-x64-sources.tar.gz
             build/flatpak/SHA256SUMS-linux-x64
 
   publish:
@@ -142,5 +125,5 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             release-assets/ClipThat-linux-x64.flatpak
-            release-assets/ClipThat-linux-x64-app-source.tar.gz
+            release-assets/ClipThat-linux-x64-sources.tar.gz
             release-assets/SHA256SUMS-linux-x64

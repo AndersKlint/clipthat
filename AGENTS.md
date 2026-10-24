@@ -7,7 +7,7 @@
 - Support YouTube downloads only.
 - Process clips sequentially: download the full source at up to 1080p into system temp, then precisely encode an H.264/AAC MKV with English VTT captions when available. Missing captions are a warning, not a failed clip.
 - Keep queue state and output-directory selection in memory; no persistence.
-- Bundle pinned standalone `yt-dlp`, `ffmpeg`, `ffprobe`, and Deno beside the executable; require libx264 and AAC encoding support. No runtime tool downloads, updates, remote EJS, or PATH fallback.
+- Bundle pinned standalone `yt-dlp`, `ffmpeg`, `ffprobe`, and Deno beside the executable; release yt-dlp is a custom minimal standalone with official EJS. Require libx264 and AAC encoding support. No runtime tool downloads, updates, remote EJS, or PATH fallback.
 
 ## Implementation
 
@@ -22,7 +22,7 @@
 
 - When changing the download/tool contract, runtime dependencies, or packaging, read and update `requirements.md`.
 - When changing setup, supported platforms, or developer commands, read and update `README.md`.
-- For tool staging or release changes, follow `packaging/tools/README.md` and the platform packaging scripts; require exact matching source archives and notices before redistribution. Development bundles are not redistributable.
+- For tool staging or release changes, follow `packaging/tools/README.md` and the platform packaging scripts: automated native tool builds and Deno material collection, matching source distributions and notices. Distinguish provenance collection from license-specific source obligations; manifest validation is not legal certification. Development bundles are not redistributable.
 
 ## Workflow
 

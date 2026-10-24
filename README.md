@@ -11,22 +11,22 @@ Jobs run sequentially: download the full source at up to 1080p into system temp,
 - **Windows x64:** extract the complete portable ZIP and launch `ClipThat/yt_section_downloader.exe`.
 - **Linux x64:** install the Flatpak and run `flatpak run com.drjetski.clipthat`.
 
-Both packages include standalone **yt-dlp, FFmpeg, FFprobe, and Deno**, including the Python and EJS components in standalone yt-dlp. No separate tool or Python installation is needed. The app uses only its adjacent `tools/` directory: it never installs or updates tools at runtime or falls back to PATH. Downloading videos still requires network access.
+Both packages include standalone **yt-dlp, FFmpeg, FFprobe, and Deno**. Release yt-dlp is a custom minimal standalone containing Python, official EJS, and certifi. No separate tool or Python installation is needed. The app uses only its adjacent `tools/` directory: it never installs or updates tools at runtime, fetches remote EJS, or falls back to PATH. Downloading videos still requires network access.
 
-See [requirements.md](requirements.md) for installation, runtime prerequisites, Flatpak directory access, disk space, troubleshooting, and access limitations.
+See [requirements.md](requirements.md) for installation, runtime prerequisites, directory access, storage, and manual checks.
 
 ## Development
 
-Install the [Flutter SDK](https://docs.flutter.dev/install), Git, **Python 3.10+** for packaging, and the desktop toolchain for your host:
+Install the [Flutter SDK](https://docs.flutter.dev/install), Git, **Python 3.10+**, and your host's desktop toolchain:
 
-- [Linux setup](https://docs.flutter.dev/platform-integration/linux/setup): Clang, CMake, Ninja, pkg-config, GTK 3 development libraries, and the C++ standard-library development package for local host builds.
-- [Windows setup](https://docs.flutter.dev/platform-integration/windows/setup): Visual Studio with the Desktop development with C++ workload and Windows SDK. Use Windows x64 and 64-bit Python for Windows packaging.
+- [Linux setup](https://docs.flutter.dev/platform-integration/linux/setup): Clang, CMake, Ninja, pkg-config, GTK 3 development libraries, and C++ standard-library development files for host builds.
+- [Windows setup](https://docs.flutter.dev/platform-integration/windows/setup): Visual Studio's Desktop development with C++ workload and Windows SDK; native x64 Windows and 64-bit Python.
 
-Packaging and tool staging need HTTPS access to the pinned upstream assets. Versions, URLs, and SHA256 digests are authoritative in [packaging/tools/lock.json](packaging/tools/lock.json); source preparation and staging rules are in [packaging/tools/README.md](packaging/tools/README.md).
+Tool staging requires HTTPS access to pinned upstream assets. [packaging/tools/README.md](packaging/tools/README.md) describes the release builders, collector, locks, and additional native build prerequisites.
 
 ### Make commands
 
-Install **GNU Make** (`make`) in addition to the development prerequisites above. On Windows, use native Windows GNU Make with the Windows toolchain, not WSL; set `PYTHON=python` if needed (the Windows default). Run commands from the repository root:
+Install **GNU Make** and run from the repository root. On Windows, use native Windows Make and the Windows toolchain, not WSL; release tool builds additionally require the MSYS2 UCRT64 environment described below.
 
 ```sh
 make help
@@ -35,146 +35,116 @@ make build
 make installer
 ```
 
-`help` is the default target. `run` builds a native Linux x64 or Windows x64 host release, stages all adjacent tools, and launches it; use 64-bit Python. It uses `build/linux/x64/release/bundle/yt_section_downloader` on Linux or `build/windows/x64/runner/Release/yt_section_downloader.exe` on Windows. Development tools are cached under `build/dev-tools/`, keyed by target platform, tool lock, and bundler, and binary hashes are checked before reuse. Repeated runs reuse the cache even if Flutter replaces its build bundle. Changed pins create a new cache; a damaged cache produces an error identifying the generated directory to remove. Staging replaces only the generated bundle's `tools/`, `licenses/tools/`, and `tool-sources/`. These development bundles are non-redistributable.
-
-`build` runs a native Linux or Windows release build without tool staging or launching. `installer` and its alias `installers` select a release Flatpak on Linux or a portable ZIP on Windows. Explicit targets are `flatpak`, `flatpak-dev` (non-redistributable), and `windows-zip`; each must run on its supported host. Windows output remains a portable ZIP, not an MSI or installer EXE. The Windows packager requires a clean, committed Git tree and Flutter on PATH.
+- `run` builds and launches a native host release with cached **upstream prebuilt development tools**. These bundles are **non-redistributable**.
+- `build` runs Flutter's native host release build without tool staging or launching.
+- `installer` (alias `installers`) automatically builds release tools, collects source materials, and packages a Linux Flatpak or Windows portable ZIP on its native host. No source-directory argument is needed.
+- Explicit package targets are `flatpak`, `windows-zip`, and `flatpak-dev` (non-redistributable, prebuilt development tools).
+- `flatpak-setup` explicitly configures user Flathub and installs GNOME Platform and SDK 50, then pins the SDK commit read from `packaging/tools/downloader-lock.json`. Install `flatpak` and `flatpak-builder` separately. No other target invokes setup.
 
 ```sh
 make flatpak-setup
+make flatpak OUTPUT_DIR="/path/to/packages"
 make flatpak-dev
-make flatpak SOURCES_DIR="/path/to/linux sources" OUTPUT_DIR="/path/to/packages"
 ```
-
-`flatpak-setup` is optional and explicitly configures user Flathub and installs GNOME Platform **and SDK 50** without sudo. It is never invoked by another target. Install `flatpak` and `flatpak-builder` separately; having the Platform alone is insufficient for packaging.
-
-Overrides (quote values containing spaces):
 
 | Variable | Default / purpose |
 | --- | --- |
-| `PYTHON` | `python3` on Linux, `python` on Windows; Python 3.10+ executable |
-| `FLUTTER` | `flutter`; executable used by `build`, `run`, and SDK discovery |
-| `FLUTTER_SDK` | SDK root discovered from the resolved Flutter executable for Flatpak; override for wrapper commands |
-| `SOURCES_DIR` | `release-sources/linux-x64` on Linux, `release-sources/windows-x64` on Windows |
+| `PYTHON` | `python3` on Linux, `python` on Windows; Python 3.10+ for developer commands, official CPython 3.13.17 x64 for Windows release preparation |
+| `FLUTTER` | `flutter`; host builds, launch, and SDK discovery |
+| `FLUTTER_SDK` | SDK root discovered from the resolved Flutter executable; override for wrappers |
 | `OUTPUT_DIR` | `build/flatpak` on Linux, `dist/windows-x64` on Windows |
 
-The release targets reuse the packaging scripts below, including their exact-source/compliance checks and refusal to overwrite artifacts. They do not install prerequisites automatically. The cache is only for `run`; package builds retain the bundler's temporary-download workflow.
+Use simple release work/output paths without spaces or shell/make metacharacters; upstream native makefiles impose this restriction. Released Windows ZIPs must still be checked when extracted into paths containing spaces.
 
-### Local Linux build and tool staging
+`make run` uses `build/linux/x64/release/bundle/yt_section_downloader` or `build/windows/x64/runner/Release/yt_section_downloader.exe`. Its cache under `build/dev-tools/` is keyed by platform, `lock.json`, and bundler hashes; executable hashes are checked before reuse. The cache-key formula and development manifest schema remain unchanged by the release integration. Changed lock/bundler contents select a new cache. If a cache is invalid or damaged, remove only the generated directory named in the error and retry. Launch staging replaces the generated bundle's `tools/`, `licenses/tools/`, and `tool-sources/`.
 
-From the repository root:
+### Direct development staging
+
+Flutter alone does not stage tools. After a host release build, stage beside the executable being run:
 
 ```sh
-flutter doctor -v
 flutter pub get
 flutter build linux --release
 python3 scripts/bundle_tools.py --platform linux-x64 --destination build/linux/x64/release/bundle --development
 ./build/linux/x64/release/bundle/yt_section_downloader
 ```
 
-Flutter alone does not stage the tools. `flutter run -d linux` normally runs a debug executable, so stage into its own `build/linux/x64/debug/bundle` directory after building that configuration if using debug mode. Tools must sit beside the executable being run.
-
-For local Windows development, run `flutter build windows --release`, then:
+On Windows:
 
 ```powershell
+flutter build windows --release
 python scripts/bundle_tools.py --platform windows-x64 --destination build/windows/x64/runner/Release --development
 & ./build/windows/x64/runner/Release/yt_section_downloader.exe
 ```
 
-The staging destination must already exist and contain no `tools/`, `licenses/tools/`, or `tool-sources/`; use a fresh build/copy for another staging invocation. `--development` marks a bundle **non-redistributable**, permitting missing source inputs for local work only. Host Linux builds are development artifacts; use the SDK-contained workflow below for Linux distribution.
+Direct staging requires an existing destination without `tools/`, `licenses/tools/`, or `tool-sources/`; use a fresh build/copy for another invocation. Debug builds need staging into their own bundle. Development staging downloads pinned prebuilt tools for speed and is not a release path.
 
 ## Release packaging
 
-### GitHub release workflows
+Release packagers require a **clean, committed Git tree** and refuse existing artifact files. They include the exact application's Git archive, tool source materials, recipes, notices, and provenance in a sibling source distribution. Each binary/source asset must be **smaller than 2 GiB** or packaging fails. Keep each platform's complete asset set together.
 
-The app version is `0.5.0-beta+1`: `0.5.0-beta` is the semantic version and `1` is the preserved Flutter build number. Flutter-generated Windows version fields remain authoritative; the resource fallbacks match this version. Release tags omit build metadata, so this version uses `v0.5.0-beta`.
-
-The native workflows [release-windows.yml](.github/workflows/release-windows.yml) and [release-linux.yml](.github/workflows/release-linux.yml) use **Flutter 3.47.2** and **Python 3.13**. Both run on pushes of `v*` tags or manual `workflow_dispatch` with a required existing `tag`. The shared `scripts/release_ci.py validate-tag` gate requires the tag to exist in Git, point at the checked-out `HEAD`, and equal `v` plus the `pubspec.yaml` version with `+build` removed. It outputs `tag`, `version`, and `prerelease`; a hyphen in the version marks the GitHub release as a prerelease. Manual dispatch must name that same matching existing tag, not create a new tag. These workflows build and package without executing tests.
-
-Before triggering a release:
-
-1. Prepare and review complete, target-specific corresponding tool sources using the [CI source archive instructions](packaging/tools/README.md#ci-source-archives). Source preparation is not automated; do not publish until the complete source-to-binary mapping has been reviewed.
-2. Host the prepared ZIP or tar archives at public HTTPS URLs. Each must contain `sources.json` at its root, without an enclosing directory, plus every referenced source archive, notice, and compliance note.
-3. In the repository's **Settings > Secrets and variables > Actions > Variables**, add these **repository variables**:
-
-   | Variable | Value |
-   | --- | --- |
-   | `WINDOWS_TOOL_SOURCES_URL` | Public HTTPS URL of the prepared Windows x64 source package |
-   | `WINDOWS_TOOL_SOURCES_SHA256` | SHA256 of that complete downloaded package |
-   | `LINUX_TOOL_SOURCES_URL` | Public HTTPS URL of the prepared Linux x64 source package |
-   | `LINUX_TOOL_SOURCES_SHA256` | SHA256 of that complete downloaded package |
-
-   Use variables, not secrets or embedded/base64 source data. Each platform's workflow fails if its variables are missing, the download/hash is invalid, or the prepared source inputs fail validation. Release packaging never uses development mode.
-4. Ensure repository/organization Actions policy permits the `GITHUB_TOKEN` to write repository contents. The workflows require `contents: write` to publish assets to the same GitHub release for the validated tag.
-5. Commit the version and release workflow changes first. Then, from that committed release revision, run locally:
-
-   ```sh
-   git tag v0.5.0-beta
-   git push origin v0.5.0-beta
-   ```
-
-   Alternatively, after that tag already exists on the remote, use **Actions > the platform release workflow > Run workflow** and supply `v0.5.0-beta` as `tag`.
-
-Successful runs upload Actions artifacts and attach the following files to the **same GitHub release**:
-
-| Platform | Release assets |
-| --- | --- |
-| Windows x64 | `ClipThat-windows-x64.zip`, `ClipThat-windows-x64-sources.zip`, `SHA256SUMS-windows-x64` |
-| Linux x64 | `ClipThat-linux-x64.flatpak`, `ClipThat-linux-x64-app-source.tar.gz`, `SHA256SUMS-linux-x64` |
-
-The Windows source ZIP includes application and prepared tool sources; the Linux application-source archive carries the exact tagged application/packaging sources, while prepared tool sources and notices also ship inside the Flatpak. Publish each platform's complete asset set together. Actions artifacts expire according to finite workflow/repository retention policy; GitHub release assets are the permanent distribution location, retained until explicitly removed. A successful run for one platform does not establish that the other platform built successfully. Complete the [manual release checks](requirements.md#manual-release-checks) on both platforms.
-
-### Matching sources are a release gate
-
-Prepare target-specific `sources.json`, exact corresponding source archives, dependency notices, and compliance notes following [packaging/tools/README.md](packaging/tools/README.md). Release scripts require these inputs; source recovery is not automated. FFmpeg's GPL build needs matching sources for x264 and other linked dependencies plus build scripts. Standalone yt-dlp is a GPLv3+ combined distribution whose sources must cover its bundled dependencies, not just the Unlicense core. Deno also requires its source archive and complete dependency notices.
-
-Validation binds declarations and hashes to the locked binaries; it does not prove archive completeness. Do not publish until the source-to-binary mapping is reviewed. Keep source distributions available alongside each binary release. Development mode is not a release bypass.
+`scripts/prepare_release_tools.py` orchestrates native FFmpeg/FFprobe and custom minimal yt-dlp builds plus automated material collection for the official Deno binary. The platform packagers invoke it automatically. See [tool preparation](packaging/tools/README.md) for locks, reusable internal staging, and the distinction between provenance collection and license-specific source obligations. Hash and manifest validation is not legal certification or a bit-reproducibility guarantee.
 
 ### Linux x64 Flatpak
 
-Install `flatpak` and `flatpak-builder` on an x86_64 Linux host, configure Flathub, and install the manifest's GNOME 50 SDK and runtime:
+On x86_64 Linux with Flatpak, flatpak-builder, Flutter SDK source, and GNU Make:
 
 ```sh
-flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak install --user flathub org.gnome.Platform//50 org.gnome.Sdk//50
-python3 scripts/package_flatpak.py --flutter-sdk /absolute/path/to/flutter --sources-dir release-sources/linux-x64
+make flatpak-setup
+python3 scripts/package_flatpak.py --flutter-sdk /absolute/path/to/flutter --output-dir build/flatpak
 ```
 
-The script copies the source and Flutter SDK into temporary work space, omitting the SDK cache, generated `build/` and `dist/`, `release-sources/`, and package caches. Release source inputs are passed separately to the tool bundler. Flutter precaching, lockfile-enforced dependency resolution, and the Linux release build run **inside the GNOME SDK**, rather than reusing a host-built Flutter bundle. The built bundle is moved into assembly; the temporary SDK, pub cache, source/build intermediates, and build home are removed before large tool downloads/staging. The small `sdk-build/` metadata directory remains for runtime checks. The script then checks tool startup and libx264/AAC availability inside the runtime and exports through `flatpak-builder` using [the manifest](packaging/linux/com.drjetski.clipthat.json). The host Flutter SDK and original sources are never deleted.
+The app and release tools build **inside GNOME SDK 50** using GCC. The SDK commit and `/usr/manifest.json` profile are locked in `packaging/tools/downloader-lock.json`; the current profile uses **CPython 3.13.16**. `make flatpak-setup` selects that commit; an unmapped SDK manifest or interpreter fails preflight. The SDK must provide GCC/G++, Make, Meson, Ninja, pkg-config, binutils, Bash, Perl, and Git. The packaging-only [CMake toolchain](packaging/linux/gcc-toolchain.cmake) selects `/usr/bin/gcc` and `/usr/bin/g++` despite Flutter's Clang environment. Host development builds still use Clang.
 
-Flatpak builds use the SDK's `/usr/bin/gcc` and `/usr/bin/g++` through [a CMake toolchain file](packaging/linux/gcc-toolchain.cmake), passed with `CMAKE_TOOLCHAIN_FILE` only to SDK build commands. This overrides Flutter's hardcoded Clang environment; no LLVM extension is required. The script checks both SDK compilers before copying sources or downloading Flutter artifacts. If either compiler is missing, reinstall `org.gnome.Sdk//50` from Flathub. Normal host builds continue to use Flutter's Clang toolchain.
+The script copies application and Flutter sources into temporary work space without host SDK caches or generated/package outputs, enforces `pubspec.lock`, builds the app and tools, then checks tool startup and libx264/AAC availability **inside the runtime**. Sources move into the sibling archive; notices remain in `/app/clipthat/licenses/tools/`. Temporary SDK, source/build intermediates, caches, and home are removed before Flatpak export; the host SDK and original sources are preserved.
 
-Outputs default to `build/flatpak/ClipThat-linux-x64.flatpak` and `build/flatpak/repo/`. `--output-dir` may be inside `build/` or outside the repository; it must not overlap the Flutter SDK. Existing artifact files are refused. Tool sources and notices remain inside the Flatpak under `/app/clipthat/`. This script does **not** generate a separate application-source archive or checksums file; the GitHub release workflow adds `ClipThat-linux-x64-app-source.tar.gz` and `SHA256SUMS-linux-x64`. For local packaging, retain and publish matching application/packaging sources and checksums separately with the release.
+Outputs:
 
-For local package work only, replace `--sources-dir ...` with `--development`. This creates `ClipThat-linux-x64-development.flatpak` on the `development` branch, with a non-redistributable tool manifest.
+- `build/flatpak/ClipThat-linux-x64.flatpak`
+- `build/flatpak/ClipThat-linux-x64-sources.tar.gz`, containing `ClipThat-sources/application.tar`, `tool-sources/`, and `release.json`
+- `build/flatpak/repo/`, the retained OSTree repository
+
+The local packager does not create checksums; CI adds `SHA256SUMS-linux-x64`. `--output-dir` must be inside `build/` or outside the source tree, without overlapping the Flutter SDK. `--development` instead produces `ClipThat-linux-x64-development.flatpak` on the `development` branch, without a release source archive.
 
 #### Packaging storage and OSTree reserves
 
-Packaging prints available space on the output filesystem before building and before export, with an advisory warning near or below 3%. This is not a hard failure threshold: OSTree defaults differ between versions, and repository-local settings determine the policy. The observed uncompressed assembled native Flutter bundle with tools was roughly 483 MiB; the final compressed Flatpak size has not been measured. Temporary Flutter downloads, compilation intermediates, tool archives/staging, Flatpak build files, the OSTree repository, and the final Flatpak require additional space; release source archives add to that. Temporary work is cleaned on success or failure, while the generated repository is retained.
+Deno material collection alone was observed at about **1.41 GiB uncompressed**, with **1,102 archives and 80,185 notice records** (roughly 81k filesystem notice files). Allow additional space and inodes for duplicated notices, source assembly, Flutter/tool compilation, caches, Flatpak build files, repository objects, and compressed artifacts. Final release package sizes remain to be measured.
 
-An export error such as `Writing content object: min-free-space-percent '3%' exceeded` can occur with tens of GiB still available. On a roughly 2 TB drive, 3% reserves roughly 55–60 GiB. A reported requested write of 4 KiB describes the write that was blocked, **not** the total additional space needed to finish. Free space or select `OUTPUT_DIR` on another filesystem (`--output-dir` when invoking the script directly).
-
-If you explicitly choose a smaller fixed reserve for the generated repository, run this command yourself before retrying:
+The packager reports output-filesystem space before building and export, with an advisory warning near a 3% reserve. An OSTree `min-free-space-percent '3%' exceeded` error may occur with tens of GiB free: on a roughly 2 TB drive, 3% reserves about 55–60 GiB. A blocked 4 KiB write does not describe the total remaining space needed. Free space or use another output filesystem. To explicitly retain a fixed 2 GiB reserve in the generated repository before retrying:
 
 ```sh
 ostree --repo=build/flatpak/repo config set core.min-free-space-size 2GB
 ```
 
-This retains a **2 GiB reserve**, rather than disabling the reserve. Replace `build/flatpak/repo` with `<OUTPUT_DIR>/repo` when overriding the output directory. The packager never runs this command, changes global or repository-local reserve settings, or prunes/deletes existing repositories or artifacts. See also [release packaging storage](requirements.md#flatpak-packaging-storage).
+Adjust the path for an output override. The packager never changes reserve settings or prunes existing repositories/artifacts. See [storage requirements](requirements.md#flatpak-packaging-storage).
 
 ### Windows x64 portable ZIP
 
-On Windows x64, prepare sources and use a clean, committed Git working tree, then run:
+Use native **MSYS2 UCRT64**, official **CPython 3.13.17 x64**, Git, Flutter, and Visual Studio's Windows desktop toolchain. Install the UCRT64 GCC, Meson, Ninja, pkgconf and binutils packages plus Make, Perl, diffutils, coreutils, and Bash. Invoke official Windows Python, not MSYS2 Python. See [Windows packaging](packaging/windows/README.md) for the command and prerequisites.
 
-```powershell
-python scripts/package_windows.py --sources-dir release-sources/windows-x64 --output-dir dist/windows-x64
+```sh
+python scripts/package_windows.py --output-dir dist/windows-x64
 ```
 
-The script builds Windows x64, stages tools into a temporary copy, verifies startup, FFmpeg's GPL configuration and libx264/AAC encoders, and creates `ClipThat-windows-x64.zip`, `ClipThat-windows-x64-sources.zip`, and `SHA256SUMS`. Publish all three together; the GitHub release workflow names its checksums asset `SHA256SUMS-windows-x64` to avoid a collision with Linux assets. The source ZIP includes the exact application's Git archive, prepared tool sources, and provenance. Existing outputs are refused; there is no development bypass, signing, installer, or automatic Visual C++ runtime installation. See [packaging/windows/README.md](packaging/windows/README.md) for details.
+This produces `ClipThat-windows-x64.zip`, `ClipThat-windows-x64-sources.zip`, and `SHA256SUMS`. Tool startup, GPL/libx264 configuration, and native AAC/libx264 encoders are checked before publication to the output directory. Windows distribution remains a portable ZIP; packaging does not sign it or install the Visual C++ runtime.
+
+### GitHub release workflows
+
+The application version remains **`0.5.0-beta+1`**; the matching tag is **`v0.5.0-beta`**, omitting Flutter build metadata. Commit the release revision before creating/pushing that tag. Both native [Linux](.github/workflows/release-linux.yml) and [Windows](.github/workflows/release-windows.yml) workflows run on `v*` tag pushes or manual dispatch with a required **existing** `tag`.
+
+`scripts/release_ci.py validate-tag --tag v0.5.0-beta` requires that tag to exist, point at checked-out `HEAD`, and match the pubspec version without `+build`. It outputs `tag`, `version`, and `prerelease`; the hyphen makes this version a prerelease. Manual dispatch selects the same existing matching tag.
+
+CI uses **Flutter 3.47.2**. Linux host orchestration uses Python 3.13, with the locked SDK's CPython 3.13.16 for native release tools; Windows uses official CPython 3.13.17 and MSYS2 UCRT64. Builds and source collection are automatic: **no user-supplied source URL/hash repository variables or hosted input archives are required**. Publishing jobs require `contents: write` and repository/organization policy permitting token writes. The workflows do not run tests.
+
+| Platform | Release assets |
+| --- | --- |
+| Windows x64 | `ClipThat-windows-x64.zip`, `ClipThat-windows-x64-sources.zip`, `SHA256SUMS-windows-x64` |
+| Linux x64 | `ClipThat-linux-x64.flatpak`, `ClipThat-linux-x64-sources.tar.gz`, `SHA256SUMS-linux-x64` |
+
+CI hashes Linux's two artifacts and renames Windows's local `SHA256SUMS` to its platform-specific name. Both workflows upload Actions artifacts and attach their complete asset sets to the same GitHub release. Actions retention is finite; published release assets remain until removed. One platform's successful run does not verify the other.
 
 ## Verification and identity
 
-Do not add, modify, or run tests. For application changes, complete a Linux release build and use the [manual checks](requirements.md#manual-release-checks) for UI, sequential queue processing, output media, cleanup, and failure handling. Windows must be built and checked on Windows; a host Linux release build alone does not verify Flatpak packaging.
+Do not add, modify, or run tests. For application changes, complete a Linux release build and leave [manual checks](requirements.md#manual-release-checks) to the user. Skip builds for docs-only changes. The Flutter package/executable remains `yt_section_downloader`, display name ClipThat!, and application ID `com.drjetski.clipthat`.
 
-The Flutter package and executable remain `yt_section_downloader`; the visible app name is ClipThat! and native application ID is `com.drjetski.clipthat`. Other platform scaffold directories are unsupported leftovers.
-
-Successful native Windows packaging, an SDK-contained Flatpak build, and manual platform checks remain release gates. Install the required packaging tools and SDK before verification; report actual build results separately.
+Source collection has completed and media tools have compiled on the Linux host. **Native Windows packaging, the SDK-contained Flatpak build, and manual platform checks remain verification gates.** The SDK Flatpak workflow has not run here because Firejail restricts nested launches; host media compilation does not establish SDK/runtime compatibility. No release publication is established by these observations.

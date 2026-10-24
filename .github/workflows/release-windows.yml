@@ -16,11 +16,9 @@ permissions:
 jobs:
   build:
     runs-on: windows-2022
-    timeout-minutes: 90
+    timeout-minutes: 240
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-      TOOL_SOURCES_URL: ${{ vars.WINDOWS_TOOL_SOURCES_URL }}
-      TOOL_SOURCES_SHA256: ${{ vars.WINDOWS_TOOL_SOURCES_SHA256 }}
     outputs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
@@ -32,25 +30,42 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        id: python
         with:
-          python-version: '3.13'
+          python-version: '3.13.17'
+          architecture: x64
       - name: Validate existing release tag
         id: release
         shell: pwsh
-        run: python scripts/release_ci.py validate-tag --tag "$env:RELEASE_TAG"
+        env:
+          RELEASE_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: '& "$env:RELEASE_PYTHON" scripts/release_ci.py validate-tag --tag "$env:RELEASE_TAG"'
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           flutter-version: '3.47.2'
           channel: stable
-      - name: Prepare matching tool sources
-        shell: pwsh
-        run: >-
-          python scripts/release_ci.py fetch-sources --platform windows-x64
-          --url "$env:TOOL_SOURCES_URL" --sha256 "$env:TOOL_SOURCES_SHA256"
-          --destination release-sources/windows-x64
+      - name: Set up UCRT64 source-build tools
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e
+        with:
+          msystem: UCRT64
+          path-type: inherit
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-meson
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-binutils
+            make perl diffutils coreutils bash
       - name: Build redistributable Windows package
-        shell: pwsh
-        run: python scripts/package_windows.py --sources-dir release-sources/windows-x64 --output-dir dist/windows-x64
+        timeout-minutes: 180
+        shell: msys2 {0}
+        env:
+          RELEASE_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          set -euo pipefail
+          release_python="$(cygpath -u "$RELEASE_PYTHON")"
+          "$release_python" scripts/package_windows.py --output-dir dist/windows-x64
       - name: Name platform checksum asset
         shell: pwsh
         run: Move-Item -LiteralPath dist/windows-x64/SHA256SUMS -Destination dist/windows-x64/SHA256SUMS-windows-x64
@@ -58,6 +73,7 @@ jobs:
         with:
           name: clipthat-windows-x64-${{ steps.release.outputs.tag }}
           if-no-files-found: error
+          compression-level: 0
           path: |
             dist/windows-x64/ClipThat-windows-x64.zip
             dist/windows-x64/ClipThat-windows-x64-sources.zip
@@ -66,7 +82,7 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: write
     concurrency:
