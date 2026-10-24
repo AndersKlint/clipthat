@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /app/clipthat/yt_section_downloader "$@"

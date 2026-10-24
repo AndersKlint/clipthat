@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=ClipThat!
+Comment=Paste a Link. Grab Your Clip.
+Exec=yt_section_downloader
+Icon=com.drjetski.clipthat
+Terminal=false
+Categories=AudioVideo;Video;
+StartupWMClass=com.drjetski.clipthat
+StartupNotify=true

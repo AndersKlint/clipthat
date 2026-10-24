@@ -136,7 +136,7 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _error =
-          'Could not open the folder chooser. Enter a folder path instead. $error');
+          'Could not open the folder chooser. Make sure your desktop file chooser is available, then try again. $error');
     } finally {
       if (mounted) setState(() => _pickingDirectory = false);
     }

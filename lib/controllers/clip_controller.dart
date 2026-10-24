@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../models/clip_job.dart';
 import '../models/clip_request.dart';
+import '../services/bundled_tools.dart';
 import '../services/clip_pipeline.dart';
 import '../services/tool_process.dart';
 
@@ -24,12 +25,12 @@ class ToolStatus {
 }
 
 class ClipController extends ChangeNotifier {
-  static const _toolNames = ['yt-dlp', 'ffmpeg', 'ffprobe'];
   final List<ClipJob> _jobs = [];
   final Set<ToolProcess> _checks = {};
-  final ClipPipeline _pipeline = ClipPipeline();
+  final BundledTools _bundledTools = BundledTools();
+  late final ClipPipeline _pipeline = ClipPipeline(_bundledTools);
   List<ToolStatus> _tools = [
-    for (final name in _toolNames)
+    for (final name in BundledTools.names)
       ToolStatus(name: name, available: false, error: 'Not checked yet.'),
   ];
   bool _checkingTools = false;
@@ -43,7 +44,9 @@ class ClipController extends ChangeNotifier {
   bool get toolsReady => _tools.every((tool) => tool.available);
   bool get isProcessing => _processing;
   String get defaultOutputDirectory {
-    final home = Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'];
+    if (Platform.isLinux) return '';
+    final home =
+        Platform.environment[Platform.isWindows ? 'USERPROFILE' : 'HOME'];
     return p.join(home ?? Directory.current.path, 'Videos', 'YouTube Clips');
   }
 
@@ -56,21 +59,26 @@ class ClipController extends ChangeNotifier {
       return;
     }
     try {
-      final results = await Future.wait(_toolNames.map((name) async {
+      final results = await Future.wait(BundledTools.names.map((name) async {
         final runner = ToolProcess();
         _checks.add(runner);
         try {
           final result = await runner.run(
-            name,
-            [name == 'yt-dlp' ? '--version' : '-version'],
+            _bundledTools.executable(name),
+            name == 'yt-dlp'
+                ? [..._bundledTools.ytDlpArguments, '--version']
+                : [name == 'deno' ? '--version' : '-version'],
             timeout: const Duration(seconds: 15),
           );
           result.requireSuccess('Unable to run $name');
-          final text = result.stdout.trim().isEmpty ? result.stderr : result.stdout;
+          final text =
+              result.stdout.trim().isEmpty ? result.stderr : result.stdout;
+          final version = text.split(RegExp(r'[\r\n]')).first.trim();
+          _validateToolVersion(name, version);
           if (name == 'ffmpeg') {
             final encoders = <String>{};
             final listing = await runner.run(
-              name,
+              _bundledTools.executable(name),
               ['-hide_banner', '-encoders'],
               timeout: const Duration(seconds: 15),
               onStdout: (line) {
@@ -83,20 +91,23 @@ class ClipController extends ChangeNotifier {
             final missing = {'libx264', 'aac'}.difference(encoders);
             if (missing.isNotEmpty) {
               throw StateError(
-                'This ffmpeg build lacks ${missing.join(' and ')} encoding support. Install an ffmpeg build with libx264 and AAC encoders.',
+                'Bundled FFmpeg lacks ${missing.join(' and ')} encoding support.',
               );
             }
           }
           return ToolStatus(
             name: name,
             available: true,
-            version: text.split(RegExp(r'[\r\n]')).first.trim(),
+            version: version,
           );
         } catch (error) {
           return ToolStatus(
             name: name,
             available: false,
-            error: 'Install $name and make it available on PATH. ${_errorText(error)}',
+            error:
+                'Repair or reinstall ClipThat! to restore the bundled $name at '
+                '${_bundledTools.executable(name)}, then refresh tool status. '
+                '${_errorText(error)}',
           );
         } finally {
           runner.dispose();
@@ -125,7 +136,8 @@ class ClipController extends ChangeNotifier {
   void clearFinished() {
     if (_disposed) return;
     _jobs.removeWhere((job) =>
-        job.status == ClipJobStatus.completed || job.status == ClipJobStatus.failed);
+        job.status == ClipJobStatus.completed ||
+        job.status == ClipJobStatus.failed);
     _notify();
   }
 
@@ -156,13 +168,15 @@ class ClipController extends ChangeNotifier {
             job.request,
             onProgress: (cutting, progress) {
               if (_disposed) return;
-              job.status = cutting ? ClipJobStatus.cutting : ClipJobStatus.downloading;
+              job.status =
+                  cutting ? ClipJobStatus.cutting : ClipJobStatus.downloading;
               job.progress = progress;
               _notify();
             },
             onWarning: (warning) {
               if (_disposed) return;
-              final combined = [if (job.warning != null) job.warning!, warning].join('\n');
+              final combined =
+                  [if (job.warning != null) job.warning!, warning].join('\n');
               job.warning = combined.length > 16384
                   ? combined.substring(combined.length - 16384)
                   : combined;
@@ -190,8 +204,12 @@ class ClipController extends ChangeNotifier {
   void _requireReady() {
     if (_disposed) throw StateError('The clip controller has been disposed.');
     if (!toolsReady) {
-      final missing = _tools.where((tool) => !tool.available).map((tool) => tool.name);
-      throw StateError('Install ${missing.join(', ')} on PATH, then check tools again.');
+      final missing =
+          _tools.where((tool) => !tool.available).map((tool) => tool.name);
+      throw StateError(
+        'Repair or reinstall ClipThat! to restore bundled tools '
+        '(${missing.join(', ')}), then refresh tool status.',
+      );
     }
   }
 
@@ -211,10 +229,38 @@ class ClipController extends ChangeNotifier {
   }
 }
 
+void _validateToolVersion(String name, String version) {
+  if (name == 'deno') {
+    final match = RegExp(
+      r'^deno (\d+)\.(\d+)\.(\d+) \(stable, release, [a-zA-Z0-9_]+(?:-[a-zA-Z0-9_]+)+\)$',
+    ).firstMatch(version);
+    if (match == null) {
+      throw FormatException(
+          'Bundled Deno returned an unrecognized stable version: $version');
+    }
+    final major = int.parse(match.group(1)!);
+    final minor = int.parse(match.group(2)!);
+    if (major < 2 || (major == 2 && minor < 3)) {
+      throw StateError(
+        'Bundled Deno ${BundledTools.minimumDenoVersion} or newer is required; found $version.',
+      );
+    }
+    return;
+  }
+  final pattern = name == 'yt-dlp'
+      ? RegExp(r'^\d{4}\.\d{2}\.\d{2}[\w.+-]*$')
+      : RegExp('^$name version \\S+');
+  if (!pattern.hasMatch(version)) {
+    throw FormatException(
+        'Bundled $name returned an unrecognized version: $version');
+  }
+}
+
 String _errorText(Object error) {
   final text = switch (error) {
     ProcessException() => '${error.executable}: ${error.message}',
-    FileSystemException() => '${error.message}${error.path == null ? '' : ': ${error.path}'}',
+    FileSystemException() =>
+      '${error.message}${error.path == null ? '' : ': ${error.path}'}',
     FormatException() => error.message,
     _ => error.toString(),
   };

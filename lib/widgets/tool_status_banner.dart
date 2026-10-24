@@ -15,13 +15,13 @@ class ToolStatusBanner extends StatelessWidget {
     final ready = controller.toolsReady;
     final missing = controller.tools.where((tool) => !tool.available).toList();
     final guidance =
-        'Install ${missing.map((tool) => tool.name).join(', ')} and add to PATH, then refresh. '
-        'FFmpeg must include ffprobe, libx264 and AAC encoders.';
+        'Repair or reinstall ClipThat! to restore its bundled tools, then refresh. '
+        'Keep the complete tools folder beside the application executable.';
     final tooltip = [
       for (final tool in controller.tools)
         '${tool.name}: ${tool.version ?? (tool.available ? 'available' : 'unavailable')}',
       if (!ready && !checking) guidance,
-      'Deno is recommended for YouTube support.',
+      'YouTube support uses bundled yt-dlp, FFmpeg, ffprobe and Deno.',
     ].join('\n');
 
     return Column(
@@ -38,10 +38,10 @@ class ToolStatusBanner extends StatelessWidget {
                     liveRegion: true,
                     child: Text(
                       checking
-                          ? 'Checking tools…'
+                          ? 'Checking bundled tools…'
                           : ready
-                              ? 'Tools ready'
-                              : 'Missing: ${missing.map((tool) => tool.name).join(', ')}',
+                              ? 'Bundled tools ready'
+                              : 'Bundled tools need repair: ${missing.map((tool) => tool.name).join(', ')}',
                       style: theme.textTheme.bodySmall!
                           .copyWith(color: colors.onSurfaceVariant),
                     ),
@@ -68,7 +68,7 @@ class ToolStatusBanner extends StatelessWidget {
             collapsedTextColor: colors.onSurfaceVariant,
             iconColor: colors.onSurfaceVariant,
             collapsedIconColor: colors.onSurfaceVariant,
-            title: const Text('Tool setup details'),
+            title: const Text('Bundled tool details'),
             children: [
               ConstrainedBox(
                 constraints: const BoxConstraints(maxHeight: 240),
@@ -80,7 +80,7 @@ class ToolStatusBanner extends StatelessWidget {
                       [
                         guidance,
                         for (final tool in missing)
-                          '${tool.name}: ${tool.error ?? 'Unavailable; check installation and PATH.'}',
+                          '${tool.name}: ${tool.error ?? 'Unavailable; repair or reinstall ClipThat!.'}',
                       ].join('\n\n'),
                       style: theme.textTheme.bodySmall!
                           .copyWith(color: colors.onSurfaceVariant),

@@ -1,0 +1,43 @@
+{
+  "app-id": "com.drjetski.clipthat",
+  "runtime": "org.gnome.Platform",
+  "runtime-version": "50",
+  "sdk": "org.gnome.Sdk",
+  "command": "yt_section_downloader",
+  "branch": "stable",
+  "separate-locales": false,
+  "finish-args": [
+    "--share=network",
+    "--share=ipc",
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--device=dri",
+    "--env=GTK_USE_PORTAL=1"
+  ],
+  "modules": [
+    {
+      "name": "clipthat",
+      "buildsystem": "simple",
+      "build-options": {
+        "strip": false,
+        "no-debuginfo": true
+      },
+      "build-commands": [
+        "mkdir -p /app/clipthat /app/bin",
+        "cp -a bundle/. /app/clipthat/",
+        "chmod 755 /app/clipthat/yt_section_downloader /app/clipthat/tools/yt-dlp /app/clipthat/tools/ffmpeg /app/clipthat/tools/ffprobe /app/clipthat/tools/deno",
+        "install -Dm755 yt_section_downloader /app/bin/yt_section_downloader",
+        "install -Dm644 com.drjetski.clipthat.desktop /app/share/applications/com.drjetski.clipthat.desktop",
+        "install -Dm644 com.drjetski.clipthat.metainfo.xml /app/share/metainfo/com.drjetski.clipthat.metainfo.xml",
+        "install -Dm644 com.drjetski.clipthat.svg /app/share/icons/hicolor/scalable/apps/com.drjetski.clipthat.svg"
+      ],
+      "sources": [
+        {"type": "dir", "path": "bundle", "dest": "bundle"},
+        {"type": "file", "path": "yt_section_downloader"},
+        {"type": "file", "path": "com.drjetski.clipthat.desktop"},
+        {"type": "file", "path": "com.drjetski.clipthat.metainfo.xml"},
+        {"type": "file", "path": "com.drjetski.clipthat.svg"}
+      ]
+    }
+  ]
+}

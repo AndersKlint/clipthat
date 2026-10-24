@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.drjetski.clipthat</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>ClipThat!</name>
+  <summary>Paste a Link. Grab Your Clip.</summary>
+  <developer id="com.drjetski">
+    <name>Dr. Jetski Studios</name>
+  </developer>
+  <description>
+    <p>Queue precise clips from YouTube links. ClipThat! downloads the full source at up to 1080p and encodes your chosen time range as an H.264/AAC MKV, including English captions when available.</p>
+    <p>Choose an output folder and process clips sequentially. Downloading and encoding tools are included.</p>
+  </description>
+  <launchable type="desktop-id">com.drjetski.clipthat.desktop</launchable>
+  <url type="homepage">https://drjetski.com</url>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+</component>

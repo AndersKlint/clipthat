@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "verified_on": "2026-10-24",
+  "checksum_provenance": "GitHub release asset SHA256 digests from the upstream repositories' release APIs; notice hashes computed from upstream tag URLs.",
+  "components": {
+    "yt-dlp": {
+      "version": "2026.10.21",
+      "license": "GPL-3.0-or-later combined standalone distribution; core Unlicense",
+      "source_reference": "https://github.com/yt-dlp/yt-dlp/tree/8cdf4fea48ecf4064387375301d7f294ebdb17c1",
+      "notices": [
+        {"name": "LICENSE", "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.21/LICENSE", "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"},
+        {"name": "THIRD_PARTY_LICENSES.txt", "url": "https://raw.githubusercontent.com/yt-dlp/yt-dlp/2026.10.21/THIRD_PARTY_LICENSES.txt", "sha256": "472aefe951c7db35e1657c1d13fd337140511ed6f2b329205105ad441c5a02b7"}
+      ],
+      "assets": {
+        "linux-x64": {"url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.21/yt-dlp_linux", "sha256": "d8bd33fca9d5b23bd5b9952b3fca36db5c46331933fda9f598a3da14ce2c243f", "format": "file", "files": {"yt-dlp": "yt-dlp"}},
+        "windows-x64": {"url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.21/yt-dlp.exe", "sha256": "33121d192d706e62f684a06f80918e3f3a8ba52ac3a65213b6951c39c7d9f555", "format": "file", "files": {"yt-dlp.exe": "yt-dlp.exe"}}
+      }
+    },
+    "ffmpeg": {
+      "version": "n8.1.3-9-g29e619e767",
+      "license": "GPL-3.0-or-later GPL variant, not nonfree; includes libx264 and native AAC",
+      "source_reference": "https://github.com/BtbN/FFmpeg-Builds/tree/6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b",
+      "notices": [
+        {"name": "COPYING.GPLv3", "url": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/29e619e767cde9045a75c29bc9a8278ae7b3a98b/COPYING.GPLv3", "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"},
+        {"name": "LICENSE.md", "url": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/29e619e767cde9045a75c29bc9a8278ae7b3a98b/LICENSE.md", "sha256": "2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af"}
+      ],
+      "assets": {
+        "linux-x64": {"url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-linux64-gpl-8.1.tar.xz", "sha256": "97ce978979194b5cf7e06a5e68020dbdaa7a4f3294c5452b6a1bc347100dbb79", "format": "tar.xz", "files": {"bin/ffmpeg": "ffmpeg", "bin/ffprobe": "ffprobe"}},
+        "windows-x64": {"url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-30-13-08/ffmpeg-n8.1.3-9-g29e619e767-win64-gpl-8.1.zip", "sha256": "7b801cdd3a1a0bb54ae6f572187e68b4ed54f52086cfee133fab2180bfb429fa", "format": "zip", "files": {"bin/ffmpeg.exe": "ffmpeg.exe", "bin/ffprobe.exe": "ffprobe.exe"}}
+      }
+    },
+    "deno": {
+      "version": "2.9.8",
+      "license": "MIT with third-party dependency licenses",
+      "source_reference": "https://github.com/denoland/deno/tree/v2.9.8",
+      "notices": [{"name": "LICENSE.md", "url": "https://raw.githubusercontent.com/denoland/deno/v2.9.8/LICENSE.md", "sha256": "f62497fffecc0852960c8d3e6934b9db86d16396e9b604072e923892cae3a588"}],
+      "assets": {
+        "linux-x64": {"url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-unknown-linux-gnu.zip", "sha256": "e890975bc2549807bbcc0b584ffafda72cc7c93349dd99c80483dd784f6c4609", "format": "zip", "files": {"deno": "deno"}},
+        "windows-x64": {"url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-x86_64-pc-windows-msvc.zip", "sha256": "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf", "format": "zip", "files": {"deno.exe": "deno.exe"}}
+      }
+    }
+  }
+}

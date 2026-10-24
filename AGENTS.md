@@ -2,12 +2,12 @@
 
 ## App contract
 
-- Target Flutter desktop on Windows and Linux only. Preserve the `yt_section_downloader` package and executable identity.
+- Target Flutter desktop on Windows x64 (portable ZIP) and Linux x64 (Flatpak) only. Preserve the `yt_section_downloader` package and executable identity.
 - Branding: short name `ClipThat!`, full title `ClipThat! – Paste a Link. Grab Your Clip.`, studio Dr. Jetski Studios, website https://drjetski.com. Keep `!` in display names; use `com.drjetski.clipthat` for the native application ID.
 - Support YouTube downloads only.
 - Process clips sequentially: download the full source at up to 1080p into system temp, then precisely encode an H.264/AAC MKV with English VTT captions when available. Missing captions are a warning, not a failed clip.
 - Keep queue state and output-directory selection in memory; no persistence.
-- Require external `yt-dlp`, `ffmpeg`, and `ffprobe` on PATH, with libx264 and AAC encoding support. Tools are neither bundled nor auto-downloaded.
+- Bundle pinned standalone `yt-dlp`, `ffmpeg`, `ffprobe`, and Deno beside the executable; require libx264 and AAC encoding support. No runtime tool downloads, updates, remote EJS, or PATH fallback.
 
 ## Implementation
 
@@ -22,6 +22,7 @@
 
 - When changing the download/tool contract, runtime dependencies, or packaging, read and update `requirements.md`.
 - When changing setup, supported platforms, or developer commands, read and update `README.md`.
+- For tool staging or release changes, follow `packaging/tools/README.md` and the platform packaging scripts; require exact matching source archives and notices before redistribution. Development bundles are not redistributable.
 
 ## Workflow
 
