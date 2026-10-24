@@ -19,7 +19,7 @@ If tool checks fail, repair or reinstall the complete package, then refresh tool
 
 ## Windows x64 setup
 
-1. Obtain `ClipThat-windows-x64.zip` from the release and verify it against the accompanying `SHA256SUMS`. Its matching `ClipThat-windows-x64-sources.zip` must also be available at the release location.
+1. Obtain `ClipThat-windows-x64.zip` from the release and verify it against the accompanying `SHA256SUMS-windows-x64` (`SHA256SUMS` for local packager output). Its matching `ClipThat-windows-x64-sources.zip` must also be available at the release location.
 2. Extract the **entire ZIP**, keeping `ClipThat/yt_section_downloader.exe`, Flutter/plugin DLLs, `data/`, `tools/`, `licenses/`, and `release.json` together. Launch the EXE from the extracted folder.
 3. Install the [Microsoft Visual C++ x64 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist) if the required runtime DLLs are not already available. The packager does not install it.
 4. Choose a writable output directory and confirm all bundled tools are ready before queueing clips.
@@ -27,6 +27,8 @@ If tool checks fail, repair or reinstall the complete package, then refresh tool
 The pinned FFmpeg supplier documents Windows 10 22H2 as its minimum baseline; the OS must also support Flutter, Deno, and the other bundled components. This is not a guarantee that every such system works. Windows packaging and manual verification must run on Windows x64; Windows was not built in this Linux environment. Packages are portable ZIPs, not installers, and the packaging script does not sign them.
 
 ## Linux x64 Flatpak setup
+
+Obtain `ClipThat-linux-x64.flatpak` and verify it against the release's `SHA256SUMS-linux-x64`. The matching `ClipThat-linux-x64-app-source.tar.gz` must also be available alongside it; corresponding tool sources and notices are included inside the Flatpak.
 
 Install Flatpak using your distribution's instructions and enable Flathub for the GNOME runtime. For a per-user installation:
 
@@ -85,7 +87,15 @@ The FFmpeg GPL build requires corresponding sources for FFmpeg, x264, other link
 
 Scripts check declarations, binary/version binding, file presence, archive formats, and hashes; they do not establish source or legal completeness. Source recovery is not automated. **Do not publish a binary release until matching source completeness is reviewed.** `--development` bundles are explicitly non-redistributable.
 
-Windows packaging publishes the portable ZIP, sibling source ZIP (including the application's exact Git archive), and `SHA256SUMS`; distribute them together. Flatpak packaging keeps prepared tool sources and notices in `/app/clipthat/tool-sources/` and `/app/clipthat/licenses/tools/`. It does not generate a separate application-source archive or checksums file; retain and publish the matching application and packaging sources separately. Keep corresponding sources accessible at the same release location for every published binary version.
+The local Windows packager creates the portable ZIP, sibling source ZIP (including the application's exact Git archive), and `SHA256SUMS`; the GitHub workflow publishes the checksums as `SHA256SUMS-windows-x64`. Distribute all three together. The local Flatpak packager keeps prepared tool sources and notices in `/app/clipthat/tool-sources/` and `/app/clipthat/licenses/tools/`, but does not generate a separate application-source archive or checksums file. The Linux GitHub workflow adds `ClipThat-linux-x64-app-source.tar.gz` from the exact tagged application/packaging sources and `SHA256SUMS-linux-x64`. Keep corresponding sources accessible at the same release location for every published binary version.
+
+### GitHub release prerequisites
+
+Release CI pins Flutter **3.47.2** and Python **3.13**, builds on each native platform, and does not execute tests. See [the release workflow instructions](README.md#github-release-workflows) for setup and tag commands. The current Flutter version is `0.5.0-beta+1`; its release tag is `v0.5.0-beta`, excluding build metadata. Shared `scripts/release_ci.py validate-tag` requires an existing tag at `HEAD` matching `v` plus the pubspec version without `+build`, and outputs `tag`, `version`, and `prerelease`. Both `v*` tag pushes and manual dispatch with a required matching existing `tag` use this gate. A version containing a hyphen produces a GitHub prerelease.
+
+Maintainers must prepare complete, reviewed tool source packages before release; CI does not recover corresponding sources. Each ZIP or tar package must expose `sources.json` at its root with every referenced file and no enclosing directory. Configure public HTTPS package URLs and whole-package SHA256 digests as repository variables in **Settings > Secrets and variables > Actions > Variables**: `WINDOWS_TOOL_SOURCES_URL`, `WINDOWS_TOOL_SOURCES_SHA256`, `LINUX_TOOL_SOURCES_URL`, and `LINUX_TOOL_SOURCES_SHA256`. These are variables, not secrets or embedded/base64 source inputs. Missing variables, hash mismatches, or invalid source inputs fail the platform release gate; development mode is never used.
+
+The workflows need `contents: write` and repository/organization permission for token writes. Both attach their distinct platform asset sets to the same GitHub release. Actions artifact downloads have finite policy-controlled retention; release assets are the permanent distribution location until removed. Commit version/workflow changes before creating and pushing the matching tag. Manual dispatch requires the tag to exist already. A successful CI package still requires the platform behavior checks below and review of complete source-to-binary mapping before publication.
 
 ## Manual release checks
 

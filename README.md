@@ -84,6 +84,45 @@ The staging destination must already exist and contain no `tools/`, `licenses/to
 
 ## Release packaging
 
+### GitHub release workflows
+
+The app version is `0.5.0-beta+1`: `0.5.0-beta` is the semantic version and `1` is the preserved Flutter build number. Flutter-generated Windows version fields remain authoritative; the resource fallbacks match this version. Release tags omit build metadata, so this version uses `v0.5.0-beta`.
+
+The native workflows [release-windows.yml](.github/workflows/release-windows.yml) and [release-linux.yml](.github/workflows/release-linux.yml) use **Flutter 3.47.2** and **Python 3.13**. Both run on pushes of `v*` tags or manual `workflow_dispatch` with a required existing `tag`. The shared `scripts/release_ci.py validate-tag` gate requires the tag to exist in Git, point at the checked-out `HEAD`, and equal `v` plus the `pubspec.yaml` version with `+build` removed. It outputs `tag`, `version`, and `prerelease`; a hyphen in the version marks the GitHub release as a prerelease. Manual dispatch must name that same matching existing tag, not create a new tag. These workflows build and package without executing tests.
+
+Before triggering a release:
+
+1. Prepare and review complete, target-specific corresponding tool sources using the [CI source archive instructions](packaging/tools/README.md#ci-source-archives). Source preparation is not automated; do not publish until the complete source-to-binary mapping has been reviewed.
+2. Host the prepared ZIP or tar archives at public HTTPS URLs. Each must contain `sources.json` at its root, without an enclosing directory, plus every referenced source archive, notice, and compliance note.
+3. In the repository's **Settings > Secrets and variables > Actions > Variables**, add these **repository variables**:
+
+   | Variable | Value |
+   | --- | --- |
+   | `WINDOWS_TOOL_SOURCES_URL` | Public HTTPS URL of the prepared Windows x64 source package |
+   | `WINDOWS_TOOL_SOURCES_SHA256` | SHA256 of that complete downloaded package |
+   | `LINUX_TOOL_SOURCES_URL` | Public HTTPS URL of the prepared Linux x64 source package |
+   | `LINUX_TOOL_SOURCES_SHA256` | SHA256 of that complete downloaded package |
+
+   Use variables, not secrets or embedded/base64 source data. Each platform's workflow fails if its variables are missing, the download/hash is invalid, or the prepared source inputs fail validation. Release packaging never uses development mode.
+4. Ensure repository/organization Actions policy permits the `GITHUB_TOKEN` to write repository contents. The workflows require `contents: write` to publish assets to the same GitHub release for the validated tag.
+5. Commit the version and release workflow changes first. Then, from that committed release revision, run locally:
+
+   ```sh
+   git tag v0.5.0-beta
+   git push origin v0.5.0-beta
+   ```
+
+   Alternatively, after that tag already exists on the remote, use **Actions > the platform release workflow > Run workflow** and supply `v0.5.0-beta` as `tag`.
+
+Successful runs upload Actions artifacts and attach the following files to the **same GitHub release**:
+
+| Platform | Release assets |
+| --- | --- |
+| Windows x64 | `ClipThat-windows-x64.zip`, `ClipThat-windows-x64-sources.zip`, `SHA256SUMS-windows-x64` |
+| Linux x64 | `ClipThat-linux-x64.flatpak`, `ClipThat-linux-x64-app-source.tar.gz`, `SHA256SUMS-linux-x64` |
+
+The Windows source ZIP includes application and prepared tool sources; the Linux application-source archive carries the exact tagged application/packaging sources, while prepared tool sources and notices also ship inside the Flatpak. Publish each platform's complete asset set together. Actions artifacts expire according to finite workflow/repository retention policy; GitHub release assets are the permanent distribution location, retained until explicitly removed. A successful run for one platform does not establish that the other platform built successfully. Complete the [manual release checks](requirements.md#manual-release-checks) on both platforms.
+
 ### Matching sources are a release gate
 
 Prepare target-specific `sources.json`, exact corresponding source archives, dependency notices, and compliance notes following [packaging/tools/README.md](packaging/tools/README.md). Release scripts require these inputs; source recovery is not automated. FFmpeg's GPL build needs matching sources for x264 and other linked dependencies plus build scripts. Standalone yt-dlp is a GPLv3+ combined distribution whose sources must cover its bundled dependencies, not just the Unlicense core. Deno also requires its source archive and complete dependency notices.
@@ -104,7 +143,7 @@ The script copies the source and Flutter SDK into temporary work space, omitting
 
 Flatpak builds use the SDK's `/usr/bin/gcc` and `/usr/bin/g++` through [a CMake toolchain file](packaging/linux/gcc-toolchain.cmake), passed with `CMAKE_TOOLCHAIN_FILE` only to SDK build commands. This overrides Flutter's hardcoded Clang environment; no LLVM extension is required. The script checks both SDK compilers before copying sources or downloading Flutter artifacts. If either compiler is missing, reinstall `org.gnome.Sdk//50` from Flathub. Normal host builds continue to use Flutter's Clang toolchain.
 
-Outputs default to `build/flatpak/ClipThat-linux-x64.flatpak` and `build/flatpak/repo/`. `--output-dir` may be inside `build/` or outside the repository; it must not overlap the Flutter SDK. Existing artifact files are refused. Tool sources and notices remain inside the Flatpak under `/app/clipthat/`. This script does **not** generate a separate application-source archive or checksums file; retain and publish the matching application/packaging sources separately with the release.
+Outputs default to `build/flatpak/ClipThat-linux-x64.flatpak` and `build/flatpak/repo/`. `--output-dir` may be inside `build/` or outside the repository; it must not overlap the Flutter SDK. Existing artifact files are refused. Tool sources and notices remain inside the Flatpak under `/app/clipthat/`. This script does **not** generate a separate application-source archive or checksums file; the GitHub release workflow adds `ClipThat-linux-x64-app-source.tar.gz` and `SHA256SUMS-linux-x64`. For local packaging, retain and publish matching application/packaging sources and checksums separately with the release.
 
 For local package work only, replace `--sources-dir ...` with `--development`. This creates `ClipThat-linux-x64-development.flatpak` on the `development` branch, with a non-redistributable tool manifest.
 
@@ -130,7 +169,7 @@ On Windows x64, prepare sources and use a clean, committed Git working tree, the
 python scripts/package_windows.py --sources-dir release-sources/windows-x64 --output-dir dist/windows-x64
 ```
 
-The script builds Windows x64, stages tools into a temporary copy, verifies startup, FFmpeg's GPL configuration and libx264/AAC encoders, and creates `ClipThat-windows-x64.zip`, `ClipThat-windows-x64-sources.zip`, and `SHA256SUMS`. Publish all three together. The source ZIP includes the exact application's Git archive, prepared tool sources, and provenance. Existing outputs are refused; there is no development bypass, signing, installer, or automatic Visual C++ runtime installation. See [packaging/windows/README.md](packaging/windows/README.md) for details.
+The script builds Windows x64, stages tools into a temporary copy, verifies startup, FFmpeg's GPL configuration and libx264/AAC encoders, and creates `ClipThat-windows-x64.zip`, `ClipThat-windows-x64-sources.zip`, and `SHA256SUMS`. Publish all three together; the GitHub release workflow names its checksums asset `SHA256SUMS-windows-x64` to avoid a collision with Linux assets. The source ZIP includes the exact application's Git archive, prepared tool sources, and provenance. Existing outputs are refused; there is no development bypass, signing, installer, or automatic Visual C++ runtime installation. See [packaging/windows/README.md](packaging/windows/README.md) for details.
 
 ## Verification and identity
 

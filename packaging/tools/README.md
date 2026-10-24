@@ -167,3 +167,67 @@ entire corresponding source distribution with the binaries through the same
 release location; retain it for each published binary release. The Windows
 packager moves `tool-sources/` into the sibling source ZIP and names that ZIP in
 `release.json`. Never publish the portable ZIP without its matching source ZIP.
+
+## CI source archives
+
+Release CI uses Flutter **3.47.2** and Python **3.13**. Source preparation is
+manual: first populate and review separate `release-sources/windows-x64/` and
+`release-sources/linux-x64/` directories using the schema above. Each manifest
+must declare exactly `yt-dlp`, `ffmpeg`, and `deno`, bind their versions and
+target-specific binary hashes to `lock.json`, and include the exact attestation,
+nonempty archive and notice lists, and compliance notes. Include every referenced
+file with its declared hash. Do not substitute generic upstream source tarballs
+for complete corresponding sources of the shipped standalone builds.
+
+Package each prepared directory's **contents**, not the enclosing directory,
+into a ZIP or tar archive. For example, from the repository root with Python 3.13:
+
+```sh
+python -c "import shutil; shutil.make_archive('windows-tool-sources', 'zip', root_dir='release-sources/windows-x64')"
+python -c "import shutil; shutil.make_archive('linux-tool-sources', 'gztar', root_dir='release-sources/linux-x64')"
+python -c "import hashlib,pathlib; print(hashlib.file_digest(pathlib.Path('windows-tool-sources.zip').open('rb'), 'sha256').hexdigest())"
+python -c "import hashlib,pathlib; print(hashlib.file_digest(pathlib.Path('linux-tool-sources.tar.gz').open('rb'), 'sha256').hexdigest())"
+```
+
+The outer archives must have this layout (with the actual paths declared in each
+target's manifest):
+
+```text
+sources.json
+yt-dlp/corresponding-source.tar.xz
+yt-dlp/COMPLETE-NOTICES.txt
+yt-dlp/COMPLIANCE.md
+ffmpeg/...
+deno/...
+```
+
+Use regular files and directories, without symlinks or paths escaping the package.
+The hashes in `sources.json` cover the individual referenced files; the digest
+configured in GitHub covers the entire outer ZIP/tar download. Recompute both
+levels as appropriate whenever inputs change, including when tool pins change.
+
+Host each complete outer archive at a **public HTTPS URL**. In the repository's
+**Settings > Secrets and variables > Actions > Variables**, configure:
+
+| Repository variable | Prepared input |
+| --- | --- |
+| `WINDOWS_TOOL_SOURCES_URL` | Windows x64 outer archive's public HTTPS URL |
+| `WINDOWS_TOOL_SOURCES_SHA256` | SHA256 of that complete archive |
+| `LINUX_TOOL_SOURCES_URL` | Linux x64 outer archive's public HTTPS URL |
+| `LINUX_TOOL_SOURCES_SHA256` | SHA256 of that complete archive |
+
+Use repository variables, not secrets or embedded/base64 source material. Keep
+the hosted archives available for reproducibility. Each native workflow fails
+if its required variables are missing, the download or hash fails, or extracted
+inputs do not satisfy the release source schema. CI never uses `--development`.
+Validation cannot establish source completeness: **do not publish until the
+complete source-to-binary mapping has been reviewed**.
+
+The Windows workflow publishes the portable ZIP, matching source ZIP, and
+`SHA256SUMS-windows-x64`. The Linux workflow publishes the Flatpak, exact tagged
+application-source archive `ClipThat-linux-x64-app-source.tar.gz`, and
+`SHA256SUMS-linux-x64`; prepared tool sources and notices remain inside the
+Flatpak. Both upload Actions artifacts and assets to the same GitHub release.
+Actions retention is finite; release assets are the permanent distribution
+location until explicitly removed. See [release workflow setup](../../README.md#github-release-workflows)
+for token write permissions, version/tag validation, and trigger instructions.
