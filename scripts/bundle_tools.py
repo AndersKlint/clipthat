@@ -1,6 +1,8 @@
 import argparse
+import configparser
 from datetime import datetime, timezone
 import hashlib
+import io
 import json
 from pathlib import Path, PurePosixPath
 import re
@@ -199,6 +201,71 @@ def extract_binaries(archive, archive_format, expected, destination, notices):
         raise ValueError(f"Archive missing executables: {set(expected) - found}")
 
 
+def retain_deno_v8_notices(tag, retain):
+    lock = retain(f"https://raw.githubusercontent.com/denoland/deno/{tag}/Cargo.lock",
+                  "v8-mapping/Cargo.lock")
+    packages = [block for block in lock.decode("utf-8").split("[[package]]")
+                if re.search(r'^name = "v8"$', block, re.M)]
+    if len(packages) != 1:
+        raise ValueError("Expected one registry v8 package in selected Deno Cargo.lock")
+    package = dict(re.findall(r'^(name|version|source|checksum) = "([^"\n]+)"$',
+                              packages[0], re.M))
+    version, checksum = package.get("version", ""), package.get("checksum", "")
+    if (package.get("source") != "registry+https://github.com/rust-lang/crates.io-index" or
+            not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version) or
+            not re.fullmatch(r"[0-9a-f]{64}", checksum)):
+        raise ValueError("Unsupported v8 crate mapping in selected Deno Cargo.lock")
+    crate_url = f"https://static.crates.io/crates/v8/v8-{version}.crate"
+    crate = fetch(crate_url, limit=64 * 1024 * 1024)
+    if hashlib.sha256(crate).hexdigest() != checksum:
+        raise ValueError("v8 crate SHA256 does not match selected Deno Cargo.lock")
+    member_name = f"v8-{version}/.cargo_vcs_info.json"
+    vcs = None
+    expanded = 0
+    with tarfile.open(fileobj=io.BytesIO(crate), mode="r|gz") as archive:
+        for count, member in enumerate(archive, 1):
+            expanded += member.size
+            if count > MAX_ENTRIES or expanded > MAX_EXPANDED or member.size < 0:
+                raise ValueError("v8 crate exceeds notice inspection limits")
+            if member.name == member_name:
+                if vcs is not None or not member.isfile() or member.size > 65536:
+                    raise ValueError("Invalid v8 crate VCS metadata member")
+                with archive.extractfile(member) as stream:
+                    vcs = stream.read()
+    if vcs is None:
+        raise ValueError("Published v8 crate lacks VCS metadata; notice mapping unavailable")
+    retain(crate_url, "v8-mapping/.cargo_vcs_info.json", data=vcs,
+           archive_member=member_name, archive_sha256=checksum)
+    metadata = json.loads(vcs)
+    revision = metadata["git"]["sha1"]
+    if metadata.get("path_in_vcs") != "" or not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise ValueError("Unsupported rusty_v8 crate VCS mapping")
+    rusty_base = f"https://raw.githubusercontent.com/denoland/rusty_v8/{revision}"
+    modules = configparser.ConfigParser(interpolation=None)
+    try:
+        modules.read_string(retain(f"{rusty_base}/.gitmodules",
+                                   "v8-mapping/rusty_v8.gitmodules").decode("utf-8"))
+    except configparser.Error as error:
+        raise ValueError(f"Malformed rusty_v8 .gitmodules at {revision}: {error}") from error
+    if (modules.get('submodule "v8"', "path", fallback="") != "v8" or
+            modules.get('submodule "v8"', "url", fallback="") !=
+            "https://github.com/denoland/v8.git"):
+        raise ValueError("Unsupported rusty_v8 V8 submodule mapping")
+    tree = json.loads(retain(
+        f"https://api.github.com/repos/denoland/rusty_v8/git/trees/{revision}",
+        "v8-mapping/rusty_v8-tree.json"))
+    links = [entry for entry in tree["tree"] if entry["path"] == "v8"]
+    if (tree.get("truncated") or len(links) != 1 or
+            links[0].get("mode") != "160000" or links[0].get("type") != "commit" or
+            not re.fullmatch(r"[0-9a-f]{40}", links[0].get("sha", ""))):
+        raise ValueError("Missing exact V8 gitlink in rusty_v8 tree")
+    retain(f"{rusty_base}/LICENSE", "rusty_v8/LICENSE")
+    v8_base = f"https://raw.githubusercontent.com/denoland/v8/{links[0]['sha']}"
+    for filename in ("LICENSE", "LICENSE.v8", "LICENSE.fdlibm", "LICENSE.strongtalk",
+                     "third_party/valgrind/LICENSE", "third_party/wasm-api/LICENSE"):
+        retain(f"{v8_base}/{filename}", f"v8/{filename}")
+
+
 def retain_notices(name, release_data, directory):
     repo = {"yt-dlp": "yt-dlp/yt-dlp", "deno": "denoland/deno",
             "ffmpeg": "BtbN/FFmpeg-Builds"}[name]
@@ -208,13 +275,22 @@ def retain_notices(name, release_data, directory):
                           "cli/tsc/dts/node/undici/LICENSE", "ext/webgpu/LICENSE.md"),
                  "ffmpeg": ("LICENSE", "README.md")}[name]
     records = []
-    for filename in filenames:
-        url = f"https://raw.githubusercontent.com/{repo}/{tag}/{filename}"
-        data = fetch(url)
+
+    def retain(url, filename, data=None, **evidence):
+        if data is None:
+            data = fetch(url)
         target = directory / filename
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(data)
-        records.append({"url": url, "file": filename, "sha256": digest(target)})
+        with target.open("xb") as output:
+            output.write(data)
+        records.append({"url": url, "file": filename, "sha256": digest(target), **evidence})
+        return data
+
+    for filename in filenames:
+        url = f"https://raw.githubusercontent.com/{repo}/{tag}/{filename}"
+        retain(url, filename)
+    if name == "deno":
+        retain_deno_v8_notices(tag, retain)
     return records
 
 
@@ -286,7 +362,7 @@ def main():
         bundle(args.platform, args.destination)
     except PermissionError as error:
         parser.exit(1, f"Permission denied: {error.filename}. Whitelist its directory via nano ~/.config/firejail/strict-dev.profile\n")
-    except (OSError, ValueError, KeyError, TypeError, tarfile.TarError, zipfile.BadZipFile, urllib.error.URLError) as error:
+    except (OSError, ValueError, KeyError, TypeError, configparser.Error, tarfile.TarError, zipfile.BadZipFile, urllib.error.URLError) as error:
         parser.exit(1, f"Bundling failed: {error}\n")
 
 

@@ -144,6 +144,10 @@ def package(args):
             raise ValueError(f"SDK build did not produce the expected Flutter bundle: {bundle}")
         bundle = bundle.rename(assembly / "bundle")
         bundle_tools("linux-x64", bundle)
+        licenses = bundle / "licenses"
+        licenses.mkdir(exist_ok=True)
+        shutil.copyfile(ROOT / "LICENSE", licenses / "ClipThat-LICENSE.txt")
+        shutil.copyfile(ROOT / "THIRD_PARTY_NOTICES.md", licenses / "THIRD_PARTY_NOTICES.md")
         for directory in (sdk, pub_cache, source, home):
             if directory.exists():
                 shutil.rmtree(directory)

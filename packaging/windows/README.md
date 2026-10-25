@@ -24,7 +24,9 @@ Each installer build resolves the latest stable official yt-dlp and selects comp
 
 Validate startup of all four tools and libx264/native AAC encoding support before considering packaging complete. The outputs are `dist/windows-x64/ClipThat-windows-x64.zip` and `SHA256SUMS-windows-x64`. The ZIP includes the complete portable app, tools, upstream notices, and available source access records. No sibling tool source ZIP is produced.
 
-This is a portable ZIP, without an MSI/installer EXE, signing, or automatic Visual C++ runtime installation. Upstream source links and notices are not legal certification or a guarantee that GPL/MPL/other obligations have been fully discharged.
+The ZIP includes `licenses/ClipThat-LICENSE.txt` (MIT for ClipThat!'s own code) and `licenses/THIRD_PARTY_NOTICES.md`; bundled components retain their own terms. This is a portable ZIP, without an MSI/installer EXE, signing, or automatic Visual C++ runtime installation.
+
+Before public distribution, obtain complete matching supplier source/build materials for official standalone yt-dlp and BtbN FFmpeg: no verified complete, durable, exact-matching corresponding-source download bundle has been found. Remaining Deno native/Cargo notices and MPL source applicability also need resolution. Generic recipes or core archives are insufficient. Required sources may be separate accessible downloads; users need not download them to install. Current tooling generates no complete source bundle. See [licensing gaps and remedy](../tools/README.md#licenses-and-source-access).
 
 ## Manual checks
 

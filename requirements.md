@@ -63,9 +63,11 @@ Availability, region restrictions, rate limits, authentication requirements, and
 
 ## Packaging and license requirements
 
-Use upstream prebuilts for all normal packages, without custom tool builds/freezing, version lock files, Deno source crawling, development-versus-redistributable flags, or tool source archive outputs. No manually prepared source archives or source URL/hash repository variables are required. The goal is a working app with compatible dependencies, not reproducible releases.
+Use upstream prebuilts for all normal packages, without custom tool builds/freezing, version locks, broad Deno source crawling, or development-versus-redistributable flags. No source URL/hash repository variables are required. Current tooling does not generate a complete tool source bundle.
 
-Include upstream notices and source access records where available for the selected binaries. Actual GPL, MPL, and other license obligations remain, including applicable corresponding-source obligations for GPL media components and source access for MPL-covered components. Referenced upstream sources, notices, hashes, and version records are **not legal certification or a guarantee that all obligations are fully discharged**. This policy does not require exhaustive provenance collection. See [tool packaging](packaging/tools/README.md#licenses-and-source-access) for guidance.
+ClipThat!'s own code is MIT licensed; bundled components keep their own terms, and AppStream metadata is separately CC0-1.0. Packages include `licenses/ClipThat-LICENSE.txt`, `licenses/THIRD_PARTY_NOTICES.md`, and upstream notices/source access records for selected binaries.
+
+**Before public distribution, fulfill applicable notice and source obligations.** No verified complete, durable, exact-matching supplier corresponding-source download bundle has been found for official standalone yt-dlp or BtbN FFmpeg. Remaining Deno native/Cargo notices and MPL source applicability are unresolved. Obtain matching supplier materials; generic recipes or core-project archives are insufficient. Required sources can be separate downloads, accessible as required by the applicable licenses; users need not download them to install. See [tool packaging](packaging/tools/README.md#licenses-and-source-access).
 
 ### Developer packaging prerequisites
 

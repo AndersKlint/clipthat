@@ -82,6 +82,10 @@ def package(output_dir):
             if path.is_symlink():
                 raise ValueError(f"Refusing symlink in package input: {path}")
         bundle("windows-x64", portable)
+        licenses = portable / "licenses"
+        licenses.mkdir(exist_ok=True)
+        shutil.copyfile(ROOT / "LICENSE", licenses / "ClipThat-LICENSE.txt")
+        shutil.copyfile(ROOT / "THIRD_PARTY_NOTICES.md", licenses / "THIRD_PARTY_NOTICES.md")
         verify_tools(portable)
         shutil.copyfile(ROOT / "packaging/windows/README.md", portable / "README-WINDOWS.md")
         archive = stage / targets[0].name

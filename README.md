@@ -58,11 +58,17 @@ make flatpak-installer OUTPUT_DIR="/path/to/packages"
 
 Flutter alone does not stage external tools. Prefer `make run` for a complete runnable bundle. Normal development and installer packaging use the same upstream prebuilt-tool policy.
 
+## Licensing
+
+ClipThat!'s own code is MIT licensed under [LICENSE](LICENSE), copyright 2026 ClipThat! contributors. Bundled components retain their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). AppStream declares the project license as MIT; its metadata is separately CC0-1.0. Packages include `licenses/ClipThat-LICENSE.txt` and `licenses/THIRD_PARTY_NOTICES.md` alongside upstream notices.
+
+**Before public distribution, fulfill applicable notice and source obligations.** No verified complete, durable, exact-matching supplier corresponding-source download bundle has been found for official standalone yt-dlp or BtbN FFmpeg; remaining Deno native/Cargo notices and MPL source applicability are also unresolved. Obtain matching supplier materials and make required sources accessible; see [the gaps and remedy](packaging/tools/README.md#licenses-and-source-access).
+
 ## Release packaging
 
-The goal is a working native application with current compatible dependencies, not reproducible tool builds. Packaging downloads upstream binaries; it does not compile or freeze tools, use dependency version lock files, crawl Deno sources, or produce tool source archives. No manually prepared source archives or source URL/hash repository variables are needed.
+The goal is a working native application with current compatible dependencies, not reproducible tool builds. Packaging downloads upstream binaries; it does not compile or freeze tools, lock selected versions, broadly crawl Deno sources, or generate a complete tool source bundle. No source URL/hash repository variables are needed.
 
-Include upstream notices and source access records where available. Actual GPL, MPL, and other license obligations still apply; upstream source links, notices, and recorded hashes are not legal certification or a guarantee that all obligations are discharged. See [tool packaging](packaging/tools/README.md#licenses-and-source-access).
+Required source materials may be separate downloads from installers; users need not download them to install. Keep provided source materials accessible as required by the applicable licenses. Current binary-and-checksum workflows do not fulfill the outstanding source obligations.
 
 ### Linux x64 Flatpak
 
@@ -101,7 +107,7 @@ Workflows upload the binary package and platform checksum file as **Actions arti
 | Windows x64 | `ClipThat-windows-x64.zip`, `SHA256SUMS-windows-x64` |
 | Linux x64 | `ClipThat-linux-x64.flatpak`, `SHA256SUMS-linux-x64` |
 
-Actions artifacts are retained for manual and tag runs; retention is finite, so download needed artifacts before expiry. No tool source archives are uploaded.
+Actions artifacts are retained for manual and tag runs; retention is finite, so download needed artifacts before expiry. Current workflows upload no tool source archives; required sources may be provided separately.
 
 Tag publishing uses separate jobs with `contents: write` permission and `softprops/action-gh-release@v2`. Shared publishing concurrency serializes release updates to avoid a release-creation race. Releases use `draft: false` and `prerelease: false`, without automatic version parsing or generated notes. Platform-specific asset names keep both packages and checksum files distinct. If one platform fails, the other can publish; the release may have partial assets until the failed workflow is retried. One platform's successful build does not verify the other.
 

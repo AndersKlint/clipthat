@@ -16,7 +16,7 @@ Record selected versions, upstream asset URLs, and available integrity/source ac
 
 Refresh dependencies by rebuilding the installer. Installed packages do not update their tools by themselves. `make run` and normal installer packaging share this prebuilt-tool policy; there is no development-versus-redistributable mode or manifest flag.
 
-The pipeline uses no custom tool compilation/freezing, dependency version lock files, Deno source crawler, tool source archive outputs, manually supplied source archives, or source URL/hash repository variables. A working compatible application takes priority over reproducible releases.
+The pipeline uses no custom tool compilation/freezing, selected-version locks, broad Deno source crawler, or source URL/hash repository variables. It does not generate a complete tool source bundle; required supplier source materials may be provided separately.
 
 ## Native packaging
 
@@ -27,13 +27,19 @@ The pipeline uses no custom tool compilation/freezing, dependency version lock f
 
 ## Licenses and source access
 
-Include upstream license/NOTICE material and source access records where available, associated with the selected binary version. Use the official [yt-dlp releases](https://github.com/yt-dlp/yt-dlp/releases), [Deno releases](https://github.com/denoland/deno/releases), and [BtbN FFmpeg builds](https://github.com/BtbN/FFmpeg-Builds/releases) and their referenced notices, sources, and build information.
+ClipThat!'s own code is MIT licensed under the root `LICENSE` (copyright 2026 ClipThat! contributors); `THIRD_PARTY_NOTICES.md` scopes that license to own code. Packages carry these as `licenses/ClipThat-LICENSE.txt` and `licenses/THIRD_PARTY_NOTICES.md`. AppStream's project license is MIT; its metadata is separately CC0-1.0.
+
+Include upstream license/NOTICE material and source access records associated with the selected binaries. Use the official [yt-dlp releases](https://github.com/yt-dlp/yt-dlp/releases), [Deno releases](https://github.com/denoland/deno/releases), and [BtbN FFmpeg builds](https://github.com/BtbN/FFmpeg-Builds/releases) and their referenced notices, sources, and build information.
 
 - **FFmpeg:** the selected GPL build includes libx264. GPL corresponding-source obligations apply to the distributed build and covered components, including applicable build information; the FFmpeg project's general source page alone is not a guarantee of matching corresponding source.
 - **yt-dlp:** distribute the official combined standalone with its upstream notices. Its bundled Python, EJS, and other components carry their own licenses; do not describe it using the retired custom-freezer licensing assumptions.
 - **Deno:** preserve applicable third-party licenses, attribution, and NOTICE material. MIT does not generally require source distribution, while MPL-covered components can carry source-access obligations.
 
-Source links, notices, hashes, and manifests are records, not legal certification or a guarantee that GPL/MPL/other obligations are fully discharged. Assess actual obligations for the distributed components and selected upstream binaries. This packaging policy does not require exhaustive dependency provenance collection or generate sibling tool source archives.
+`bundle_tools.py` adds matched-reference rusty_v8 and V8 BSD licenses plus fdlibm, Strongtalk, Valgrind, and wasm-api licenses. It follows the selected Deno release's `Cargo.lock` v8 crate checksum and the crate's VCS revision tree, without pinning future selections or broadly crawling sources. This targeted collection does not settle remaining Deno native/Cargo notices or MPL source applicability.
+
+**Public-distribution gap:** no verified complete, durable, exact-matching supplier corresponding-source download bundle has been found for official standalone yt-dlp or BtbN FFmpeg. A generic build recipe or core-project archive does not supply all matching covered components and applicable build information. Source links and notice records alone do not close this gap.
+
+Before public distribution, obtain complete matching source/build materials from the binary suppliers, preserve applicable notices, and make required sources accessible under the applicable licenses. Resolve the remaining Deno notice/source questions as well. Source downloads may be separate from installers, so users need not download sources to install, but provided materials must remain accessible as required. Current tooling generates no complete source bundle and makes no source offer.
 
 ## Outputs and workflows
 
