@@ -4,7 +4,7 @@
 
 ## Runtime requirements
 
-- The complete **Windows x64 portable ZIP** or **Linux x64 Flatpak**, including bundled tools and accompanying files. Other platforms/architectures are unsupported.
+- The complete **Windows x64 portable ZIP**, **Windows x64 Inno Setup installer**, or **Linux x64 Flatpak**, including bundled tools and accompanying files. Other platforms/architectures are unsupported; the Windows installer targets native x64 only.
 - Internet access to YouTube, working graphics drivers, permission to execute the bundled programs, and writable temporary/output directories.
 - Space for the **full source download**, separate video/audio streams where applicable, temporary encoded clip, and final output copy. Even a short clip downloads the full source. Encoding uses CPU.
 - The Windows runtime or Linux Flatpak runtime/portals below.
@@ -25,12 +25,14 @@ The app passes bundled FFmpeg/Deno paths explicitly, ignores user yt-dlp configu
 
 ## Windows x64 setup
 
-1. Obtain `ClipThat-windows-x64.zip` and verify `SHA256SUMS-windows-x64`.
-2. Extract the **entire ZIP**, keeping `ClipThat/yt_section_downloader.exe`, Flutter/plugin DLLs, `data/`, `tools/`, notices, and accompanying metadata together. Launch the EXE.
+1. Obtain `ClipThat-windows-x64-setup.exe` or `ClipThat-windows-x64.zip` and verify its entry in `SHA256SUMS-windows-x64`, which lists both binaries.
+2. Run Setup for a per-user installation to `%LOCALAPPDATA%\Programs\ClipThat!` without administrator privileges. It provides a Start Menu shortcut, optional desktop shortcut, uninstall support, and optional launch after installation. Alternatively, extract the **entire ZIP**, keeping `ClipThat/yt_section_downloader.exe`, Flutter/plugin DLLs, `data/`, `tools/`, notices, and accompanying metadata together. Launch the EXE.
 3. Install the [Microsoft Visual C++ x64 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist) if needed; packaging does not install it.
 4. Select a writable output directory and confirm all four tools are ready.
 
-The OS must support Flutter, Deno, and the other bundled components. Verify Windows 10 22H2 or newer on a clean x64 target; this is not a compatibility certification for every such machine. Packages are unsigned portable ZIPs, not installer executables. Native Windows packaging and behavior checks remain required.
+Close the application before upgrading. For an installed copy, run the new Setup for the same user and installation directory. For a portable copy, extract the new ZIP into a fresh directory and replace shortcuts as needed. Uninstall the installed copy through Windows Settings > Apps; remove a portable copy by deleting its extracted directory after closing it. Keep saved output clips separately from the application directory.
+
+The OS must support Flutter, Deno, and the other bundled components. Verify Windows 10 22H2 or newer on a clean x64 target; this is not a compatibility certification for every such machine. Both Windows assets are unsigned. Neither installs the Visual C++ runtime or updates tools at runtime. Native Windows packaging and behavior checks remain required.
 
 ## Linux x64 Flatpak setup
 
@@ -73,7 +75,7 @@ ClipThat!'s own code is MIT licensed; bundled components keep their own terms, a
 
 Use GNU Make, ordinary Python 3.x, Flutter stable, Git, and the native platform tools. `make run` builds and launches with bundled upstream tools; `make build` performs only Flutter's native build. `make installer` / `make installers` creates the native package.
 
-- **Windows:** Visual Studio's Desktop development with C++ workload and Windows SDK, native Windows Make and Python. No MSYS2 or exact Python pin. Use `make windows-installer` / `make windows-zip`; see [Windows packaging](packaging/windows/README.md).
+- **Windows:** Visual Studio's Desktop development with C++ workload and Windows SDK, native Windows Make and Python, and Inno Setup 6.3+ (`choco install innosetup --yes`). Discover `ISCC.exe` on PATH or under the standard `Inno Setup 6` directory in `ProgramFiles(x86)` / `ProgramFiles`; there is no extra compiler override. No MSYS2 or exact Python pin. Both `make windows-installer` and `make windows-zip` invoke `python scripts/package_windows.py` and always produce the ZIP, setup EXE, and a checksum file listing both. Setup reads its version from the built EXE using `GetFileVersion`, not tags or pubspec parsing. Both assets contain the same tools, licenses, and data; see [Windows packaging](packaging/windows/README.md).
 - **Linux:** Flatpak, flatpak-builder, a host-side AppStream SVG loader, and GNOME Platform and SDK 50. On Ubuntu/Debian, install host dependencies with `sudo apt install flatpak flatpak-builder librsvg2-common`; explicitly include `librsvg2-common` when using `--no-install-recommends`. AppStream composes metadata on the host and needs its SVG loader even though the app builds inside the SDK. Run `make flatpak-setup` explicitly to configure/install prerequisites; other targets do not install them. Use `make flatpak-installer` / `make flatpak`. Build Flutter inside the SDK rather than exporting a host-built app; no SDK commit or interpreter pin is required.
 
 See [Make commands](README.md#make-commands) for overrides. There is one normal prebuilt-tool policy for running and packaging, without a separate Flatpak development mode.
@@ -86,7 +88,7 @@ OSTree reserve policy can block export despite free disk space. An error such as
 
 ### GitHub workflow requirements
 
-Both native workflows retain the binary package and checksums as **Actions artifacts**. Manual **`workflow_dispatch`** runs on the desired revision require no tag and do not publish a GitHub Release. Pushing a **`v*` tag** triggers both workflows; each successful platform publishes to the same release for that tag. No tag-to-`pubspec.yaml` version matching is required. Windows assets are `ClipThat-windows-x64.zip` and `SHA256SUMS-windows-x64`; Linux assets are `ClipThat-linux-x64.flatpak` and `SHA256SUMS-linux-x64`. No tool source archives are uploaded.
+Both native workflows retain the binary packages and checksums as **Actions artifacts**. Manual **`workflow_dispatch`** runs on the desired revision require no tag and do not publish a GitHub Release. Pushing a **`v*` tag** triggers both workflows; each successful platform publishes to the same release for that tag. No tag-to-`pubspec.yaml` version matching is required. Windows assets are `ClipThat-windows-x64.zip`, `ClipThat-windows-x64-setup.exe`, and `SHA256SUMS-windows-x64`; Linux assets are `ClipThat-linux-x64.flatpak` and `SHA256SUMS-linux-x64`. The Windows workflow ensures Inno Setup is available using Chocolatey. No tool source archives are uploaded.
 
 Separate publish jobs use `softprops/action-gh-release@v2`, job-scoped `contents: write`, and shared concurrency to serialize release updates. Releases are nondraft and nonprerelease (`draft: false`, `prerelease: false`), without automatic version parsing or generated notes. Either platform can publish independently; a failed platform can leave partial release assets until its workflow is retried.
 
@@ -96,7 +98,7 @@ Actions retention is finite. Download needed artifacts before expiry. See [workf
 
 Leave behavior checks to the user; do not add, modify, or run tests.
 
-1. **Installation/tools:** verify package checksums. Launch the complete extracted Windows ZIP from a path containing spaces, or an installed Flatpak on the target desktop. Confirm all four tools work without host tools/Python on PATH. Check Windows runtime prerequisites on a clean machine.
+1. **Installation/tools:** verify package checksums, including both Windows binaries. Launch the complete extracted Windows ZIP from a path containing spaces, or an installed Flatpak on the target desktop. On native x64 Windows, install Setup as a standard user, verify its per-user location, Start Menu and optional desktop shortcuts, optional launch, then close the app and upgrade with a new package. Verify all four tools after installation and upgrade. Uninstall through Windows Settings and check removal of application files/shortcuts and preservation of saved clips outside the installation directory. Confirm all four tools work without host tools/Python on PATH. Check the separately installed Visual C++ prerequisite on a clean machine; Setup must not install it.
 2. **UI/directory access:** resize, validate bad links/time ranges, and choose a writable directory. In Flatpak, Browse through the portal and verify writes; typing an inaccessible host path should fail usefully. Restart and confirm session state resets.
 3. **Queue/cleanup:** queue two clips, verify sequential processing, retry failure, clear finished jobs, and close during download/encoding. Inspect temporary/incomplete-output cleanup and existing-file preservation.
 4. **Media:** play MKVs and inspect precise boundaries, H.264/AAC, and English VTT when enabled/available. Check disabled/missing captions and caption-encoding fallback.

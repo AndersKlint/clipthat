@@ -3,7 +3,7 @@
 ifeq ($(OS),Windows_NT)
 PYTHON ?= python
 HOST_PLATFORM := windows
-HOST_PACKAGE := windows-zip
+HOST_PACKAGE := windows-installer
 else
 PYTHON ?= python3
 HOST_PLATFORM := linux
@@ -26,7 +26,7 @@ endif
 .PHONY: help run build installer installers flatpak flatpak-installer windows-installer windows-zip flatpak-setup
 
 help:
-	@"$(PYTHON)" -c "print('ClipThat! developer commands\n\n  make run                Build and launch with bundled upstream tools\n  make build              Native host Flutter release build\n  make installer          Native installer with upstream tools and checksums\n  make installers         Alias for installer\n  make flatpak-installer  Linux Flatpak built inside GNOME SDK 50\n  make flatpak            Alias for flatpak-installer\n  make windows-installer  Windows portable ZIP\n  make windows-zip        Alias for windows-installer\n  make flatpak-setup      Install current GNOME Platform + SDK 50 from Flathub\n\nVariables: PYTHON, FLUTTER, FLUTTER_SDK, OUTPUT_DIR\nDefaults: Python python3 on Linux / python on Windows; Flutter on PATH;\nFlutter SDK detected from resolved executable;\noutput build/flatpak on Linux / dist/windows-x64 on Windows.')"
+	@"$(PYTHON)" -c "print('ClipThat! developer commands\n\n  make run                Build and launch with bundled upstream tools\n  make build              Native host Flutter release build\n  make installer          Native package(s) with upstream tools and checksums\n  make installers         Alias for installer\n  make flatpak-installer  Linux Flatpak built inside GNOME SDK 50\n  make flatpak            Alias for flatpak-installer\n  make windows-installer  Windows portable ZIP + Inno Setup EXE (requires Inno Setup 6.3+)\n  make windows-zip        Alias for windows-installer; produces both assets\n  make flatpak-setup      Install current GNOME Platform + SDK 50 from Flathub\n\nVariables: PYTHON, FLUTTER, FLUTTER_SDK, OUTPUT_DIR\nDefaults: Python python3 on Linux / python on Windows; Flutter on PATH;\nFlutter SDK detected from resolved executable;\noutput build/flatpak on Linux / dist/windows-x64 on Windows.')"
 
 run:
 	"$(PYTHON)" scripts/dev_run.py --flutter "$(FLUTTER)"

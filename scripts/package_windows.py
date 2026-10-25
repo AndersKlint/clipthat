@@ -49,16 +49,38 @@ def verify_tools(directory):
         raise ValueError("FFmpeg does not provide both libx264 and native AAC encoders")
 
 
+def find_inno_compiler():
+    candidates = []
+    on_path = shutil.which("ISCC.exe")
+    if on_path:
+        candidates.append(Path(on_path))
+    for variable in ("ProgramFiles(x86)", "ProgramFiles"):
+        directory = os.environ.get(variable)
+        if directory:
+            candidates.append(Path(directory) / "Inno Setup 6" / "ISCC.exe")
+    for candidate in dict.fromkeys(candidates):
+        if candidate.is_file():
+            probe = subprocess.run([str(candidate), "/?"], cwd=ROOT, shell=False,
+                                   check=False, timeout=60, stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT, text=True,
+                                   encoding="utf-8", errors="replace")
+            if probe.returncode in (0, 1) and "Inno Setup 6" in probe.stdout:
+                return candidate.absolute()
+    raise ValueError("Install Inno Setup 6.3+ (6.x) with ISCC.exe on PATH or in Program Files/Inno Setup 6")
+
+
 def package(output_dir):
     if os.name != "nt" or platform.machine().lower() not in ("amd64", "x86_64") or struct.calcsize("P") != 8:
         raise ValueError("Run this script on Windows x64 with 64-bit Python; cross-compilation is unsupported")
     flutter = shutil.which("flutter.bat")
     if not flutter:
         raise ValueError("Flutter's Windows SDK must be installed with flutter.bat available on PATH")
+    compiler = find_inno_compiler()
     output_dir = output_dir.absolute()
     if output_dir.is_symlink():
         raise ValueError("Output directory must not be a symlink")
-    targets = [output_dir / name for name in ("ClipThat-windows-x64.zip", "SHA256SUMS-windows-x64")]
+    targets = [output_dir / name for name in (
+        "ClipThat-windows-x64.zip", "ClipThat-windows-x64-setup.exe", "SHA256SUMS-windows-x64")]
     if any(path.exists() or path.is_symlink() for path in targets):
         raise ValueError("Package outputs already exist; choose a fresh --output-dir")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -90,9 +112,18 @@ def package(output_dir):
         shutil.copyfile(ROOT / "packaging/windows/README.md", portable / "README-WINDOWS.md")
         archive = stage / targets[0].name
         zip_directory(portable, archive)
-        if archive.stat().st_size >= 2 * 1024**3:
-            raise ValueError(f"Package must be smaller than 2 GiB: {archive.name}")
-        (stage / targets[1].name).write_text(f"{digest(archive)}  {archive.name}\n", encoding="utf-8")
+        print("Compiling Inno Setup Windows x64 installer", flush=True)
+        subprocess.run([str(compiler), f"/DSourceDir={portable}", f"/DOutputDir={stage}",
+                        str(ROOT / "packaging/windows/clipthat.iss")],
+                       cwd=ROOT, shell=False, check=True, timeout=1800)
+        assets = [stage / target.name for target in targets[:2]]
+        for asset in assets:
+            if not asset.is_file() or asset.is_symlink():
+                raise ValueError(f"Package output missing or invalid: {asset}")
+            if asset.stat().st_size >= 2 * 1024**3:
+                raise ValueError(f"Package must be smaller than 2 GiB: {asset.name}")
+        (stage / targets[2].name).write_text(
+            "".join(f"{digest(asset)}  {asset.name}\n" for asset in assets), encoding="utf-8")
         published = []
         try:
             for target in targets:
@@ -103,11 +134,11 @@ def package(output_dir):
             for target in published:
                 target.unlink()
             raise
-    print(f"Windows package ready: {output_dir}")
+    print(f"Windows ZIP and installer ready: {output_dir}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Build ClipThat! Windows x64 portable ZIP with bundled upstream tools.")
+    parser = argparse.ArgumentParser(description="Build ClipThat! Windows x64 portable ZIP and Inno Setup installer with bundled upstream tools.")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "dist/windows-x64")
     args = parser.parse_args()
     try:
