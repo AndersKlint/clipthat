@@ -23,7 +23,8 @@
 - When changing the download/tool contract, runtime dependencies, or packaging, read and update `requirements.md`.
 - When changing setup, supported platforms, or developer commands, read and update `README.md`.
 - For tool staging or packaging changes, read `packaging/tools/README.md` and the platform packaging scripts. Use upstream prebuilts without custom tool builds/freezing, version locks, Deno source crawling, development/redistributable flags, or tool source archive outputs. Include upstream notices and source access records where available; actual license obligations remain, and records are not legal certification or a guarantee of compliance. Preserve `packaging/tools/*review.md` as historical findings.
-- Use ordinary Python 3.x and Flutter stable with native Windows tooling; build Linux Flutter inside GNOME SDK 50 for runtime ABI compatibility, without SDK commit/interpreter pins. Keep prerequisite installation explicit through `make flatpak-setup`. Manual workflows upload binary packages and checksums as Actions artifacts without tag requirements or release publication.
+- Use ordinary Python 3.x and Flutter stable with native Windows tooling; build Linux Flutter inside GNOME SDK 50 for runtime ABI compatibility, without SDK commit/interpreter pins. Keep prerequisite installation explicit through `make flatpak-setup`.
+- Retain binary packages and platform checksums as Actions artifacts. Manual workflows require no tag and do not publish releases; pushed `v*` tags trigger both platforms to publish successful packages to one nondraft, nonprerelease GitHub Release. Use separate publish jobs with job-scoped `contents: write`, `softprops/action-gh-release@v2`, and shared publishing concurrency. Allow partial assets until a failed platform is retried; require no tag/pubspec matching, automatic version parsing, or generated notes. See `README.md#github-release-workflows` for details.
 
 ## Workflow
 

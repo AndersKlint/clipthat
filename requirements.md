@@ -84,7 +84,9 @@ OSTree reserve policy can block export despite free disk space. An error such as
 
 ### GitHub workflow requirements
 
-Both native workflows use manual **`workflow_dispatch`** on the desired revision and upload the binary package and checksums as **Actions artifacts**. They require no tag or release publication, and produce no source assets. Windows artifacts are `ClipThat-windows-x64.zip` and `SHA256SUMS-windows-x64`; Linux artifacts are `ClipThat-linux-x64.flatpak` and `SHA256SUMS-linux-x64`.
+Both native workflows retain the binary package and checksums as **Actions artifacts**. Manual **`workflow_dispatch`** runs on the desired revision require no tag and do not publish a GitHub Release. Pushing a **`v*` tag** triggers both workflows; each successful platform publishes to the same release for that tag. No tag-to-`pubspec.yaml` version matching is required. Windows assets are `ClipThat-windows-x64.zip` and `SHA256SUMS-windows-x64`; Linux assets are `ClipThat-linux-x64.flatpak` and `SHA256SUMS-linux-x64`. No tool source archives are uploaded.
+
+Separate publish jobs use `softprops/action-gh-release@v2`, job-scoped `contents: write`, and shared concurrency to serialize release updates. Releases are nondraft and nonprerelease (`draft: false`, `prerelease: false`), without automatic version parsing or generated notes. Either platform can publish independently; a failed platform can leave partial release assets until its workflow is retried.
 
 Actions retention is finite. Download needed artifacts before expiry. See [workflow instructions](README.md#github-release-workflows). A successful build on one platform does not verify the other.
 

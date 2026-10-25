@@ -37,6 +37,6 @@ Source links, notices, hashes, and manifests are records, not legal certificatio
 
 ## Outputs and workflows
 
-Normal outputs are the Windows portable ZIP or Linux Flatpak plus checksums. Manual `workflow_dispatch` workflows upload binary installers and platform checksum files as Actions artifacts; no tag, GitHub release publication, or source assets are required. See [workflow instructions](../../README.md#github-release-workflows).
+Normal outputs are the Windows portable ZIP or Linux Flatpak plus platform-specific checksums. Both workflows retain these as Actions artifacts. Manual `workflow_dispatch` runs require no tag and do not publish releases. A pushed `v*` tag triggers both workflows; each successful platform publishes its package and checksums to the same nondraft, nonprerelease GitHub Release. One platform's failure can leave partial assets until retry. No tool source archives are uploaded. See [workflow instructions](../../README.md#github-release-workflows) for publishing permissions and concurrency.
 
 The `*review.md` files in this directory are historical research findings. They document earlier investigations, not the current packaging contract.

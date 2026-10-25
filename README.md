@@ -89,7 +89,10 @@ The outputs are `dist/windows-x64/ClipThat-windows-x64.zip` and `SHA256SUMS-wind
 
 ### GitHub release workflows
 
-The native [Linux](.github/workflows/release-linux.yml) and [Windows](.github/workflows/release-windows.yml) workflows are manually triggered with **`workflow_dispatch`**. Select the desired revision and run the platform workflow; no release tag is required.
+The native [Linux](.github/workflows/release-linux.yml) and [Windows](.github/workflows/release-windows.yml) workflows support two triggers:
+
+- **Manual `workflow_dispatch`:** select the desired revision and run either platform workflow. No tag is required, and manual runs do not publish a GitHub Release.
+- **Push a `v*` tag:** both workflows build, and each successful platform publishes its package and checksums to the same GitHub Release for that tag. There is no tag-to-`pubspec.yaml` version matching requirement.
 
 Workflows upload the binary package and platform checksum file as **Actions artifacts**:
 
@@ -98,7 +101,9 @@ Workflows upload the binary package and platform checksum file as **Actions arti
 | Windows x64 | `ClipThat-windows-x64.zip`, `SHA256SUMS-windows-x64` |
 | Linux x64 | `ClipThat-linux-x64.flatpak`, `SHA256SUMS-linux-x64` |
 
-They do not publish GitHub releases or source assets. Actions retention is finite; download needed artifacts before expiry. One platform's successful build does not verify the other.
+Actions artifacts are retained for manual and tag runs; retention is finite, so download needed artifacts before expiry. No tool source archives are uploaded.
+
+Tag publishing uses separate jobs with `contents: write` permission and `softprops/action-gh-release@v2`. Shared publishing concurrency serializes release updates to avoid a release-creation race. Releases use `draft: false` and `prerelease: false`, without automatic version parsing or generated notes. Platform-specific asset names keep both packages and checksum files distinct. If one platform fails, the other can publish; the release may have partial assets until the failed workflow is retried. One platform's successful build does not verify the other.
 
 ## Verification and identity
 
