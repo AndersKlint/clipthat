@@ -72,7 +72,7 @@ Include upstream notices and source access records where available for the selec
 Use GNU Make, ordinary Python 3.x, Flutter stable, Git, and the native platform tools. `make run` builds and launches with bundled upstream tools; `make build` performs only Flutter's native build. `make installer` / `make installers` creates the native package.
 
 - **Windows:** Visual Studio's Desktop development with C++ workload and Windows SDK, native Windows Make and Python. No MSYS2 or exact Python pin. Use `make windows-installer` / `make windows-zip`; see [Windows packaging](packaging/windows/README.md).
-- **Linux:** Flatpak, flatpak-builder, GNOME Platform and SDK 50. Run `make flatpak-setup` explicitly to configure/install prerequisites; other targets do not install them. Use `make flatpak-installer` / `make flatpak`. Build Flutter inside the SDK rather than exporting a host-built app; no SDK commit or interpreter pin is required.
+- **Linux:** Flatpak, flatpak-builder, a host-side AppStream SVG loader, and GNOME Platform and SDK 50. On Ubuntu/Debian, install host dependencies with `sudo apt install flatpak flatpak-builder librsvg2-common`; explicitly include `librsvg2-common` when using `--no-install-recommends`. AppStream composes metadata on the host and needs its SVG loader even though the app builds inside the SDK. Run `make flatpak-setup` explicitly to configure/install prerequisites; other targets do not install them. Use `make flatpak-installer` / `make flatpak`. Build Flutter inside the SDK rather than exporting a host-built app; no SDK commit or interpreter pin is required.
 
 See [Make commands](README.md#make-commands) for overrides. There is one normal prebuilt-tool policy for running and packaging, without a separate Flatpak development mode.
 

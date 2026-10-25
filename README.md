@@ -42,7 +42,7 @@ make installer
 - `installer` (alias `installers`) creates the native package: Linux Flatpak or Windows portable ZIP.
 - `flatpak-installer` (alias `flatpak`) explicitly creates the Linux package.
 - `windows-installer` (alias `windows-zip`) explicitly creates the Windows package.
-- `flatpak-setup` explicitly configures user Flathub and installs GNOME Platform and SDK 50 prerequisites. Install `flatpak` and `flatpak-builder` separately. Other targets do not invoke prerequisite installation.
+- `flatpak-setup` explicitly configures user Flathub and installs GNOME Platform and SDK 50 prerequisites. Install host packaging dependencies separately: on Ubuntu/Debian, `sudo apt install flatpak flatpak-builder librsvg2-common`. The host-side AppStream compose step needs the SVG loader provided by `librsvg2-common`, including when installing with `--no-install-recommends`. Other targets do not invoke prerequisite installation.
 
 ```sh
 make flatpak-setup

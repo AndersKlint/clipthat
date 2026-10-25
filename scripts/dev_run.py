@@ -65,8 +65,10 @@ def run(flutter):
         raise ValueError("make run requires native Linux x64 or Windows x64 with 64-bit Python.")
     target = host.lower()
     target_platform = target + "-x64"
-    subprocess.run([str(flutter), "build", target, "--release", "--target-platform", target_platform],
-                   cwd=ROOT, check=True)
+    arguments = [str(flutter), "build", target, "--release"]
+    if host == "Linux":
+        arguments += ["--target-platform", target_platform]
+    subprocess.run(arguments, cwd=ROOT, check=True)
     destination = ROOT / ("build/windows/x64/runner/Release" if host == "Windows"
                           else "build/linux/x64/release/bundle")
     executable = destination / ("yt_section_downloader.exe" if host == "Windows"

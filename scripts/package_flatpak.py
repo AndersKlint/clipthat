@@ -5,7 +5,6 @@ import json
 import os
 from pathlib import Path
 import platform
-import shlex
 import shutil
 import subprocess
 import sys
@@ -42,6 +41,28 @@ def report_storage(output):
             "Repository policy is unchanged.",
             file=sys.stderr, flush=True,
         )
+
+
+def report_appstream_issues(work):
+    files = work / "flatpak-build" / "files"
+    try:
+        files.stat()
+        print("Running diagnostic-only AppStream compose on staged files; "
+              "the original flatpak-builder failure remains fatal.", file=sys.stderr, flush=True)
+        with tempfile.TemporaryDirectory(prefix="appstream-diagnostic-", dir=work) as temporary:
+            run([
+                "appstreamcli", "compose", "--no-net", "--no-color", "--verbose",
+                "--print-report=full", "--prefix=/", f"--origin={APP_ID}",
+                f"--components={APP_ID},{APP_ID}.desktop",
+                f"--result-root={temporary}", files,
+            ], env={**os.environ, "LANGUAGE": "C"}, timeout=120)
+    except PermissionError:
+        raise
+    except FileNotFoundError as error:
+        print(f"Skipping AppStream diagnostic: staged files or appstreamcli missing: {error}",
+              file=sys.stderr, flush=True)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        print(f"AppStream diagnostic unavailable: {error}", file=sys.stderr, flush=True)
 
 
 def package(args):
@@ -175,20 +196,7 @@ def package(args):
                 work / "flatpak-build", assembly / MANIFEST,
             ])
         except subprocess.CalledProcessError:
-            reserve_command = shlex.join([
-                "ostree", f"--repo={repository}", "config", "set", "core.min-free-space-size", "2GB",
-            ])
-            print(
-                "If export reports 'min-free-space-percent' or 'min-free-space-size' exceeded, "
-                "OSTree's reserve can block writes even with usable space remaining. "
-                "Free space or retry with OUTPUT_DIR on another filesystem "
-                "(--output-dir for this script). A small requested write such as 4 KiB "
-                "is not the total space required.\n"
-                "Optional, only if you choose to change this generated repository's policy "
-                "to retain a 2 GiB reserve instead of a percentage (not executed):\n"
-                f"  {reserve_command}",
-                file=sys.stderr, flush=True,
-            )
+            report_appstream_issues(work)
             raise
         staged_artifact = work / filename
         run([

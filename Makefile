@@ -7,6 +7,7 @@ HOST_PACKAGE := windows-zip
 else
 PYTHON ?= python3
 HOST_PLATFORM := linux
+HOST_TARGET_FLAGS := --target-platform linux-x64
 HOST_PACKAGE := flatpak
 endif
 
@@ -31,7 +32,7 @@ run:
 	"$(PYTHON)" scripts/dev_run.py --flutter "$(FLUTTER)"
 
 build:
-	"$(FLUTTER)" build $(HOST_PLATFORM) --release --target-platform $(HOST_PLATFORM)-x64
+	"$(FLUTTER)" build $(HOST_PLATFORM) --release $(HOST_TARGET_FLAGS)
 
 installer installers: $(HOST_PACKAGE)
 

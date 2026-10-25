@@ -65,7 +65,7 @@ def package(output_dir):
     with tempfile.TemporaryDirectory(prefix=".clipthat-package-", dir=output_dir) as temporary:
         stage = Path(temporary)
         print("Building Flutter Windows x64 release", flush=True)
-        subprocess.run([flutter, "build", "windows", "--release", "--target-platform", "windows-x64"],
+        subprocess.run([flutter, "build", "windows", "--release"],
                        cwd=ROOT, shell=False, check=True, timeout=1800)
         built = ROOT / "build/windows/x64/runner/Release"
         if not (built / "yt_section_downloader.exe").is_file():

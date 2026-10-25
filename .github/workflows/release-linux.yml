@@ -28,7 +28,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
-            flatpak flatpak-builder bubblewrap curl git unzip xz-utils zip
+            flatpak flatpak-builder librsvg2-common bubblewrap curl git unzip xz-utils zip
 
       - name: Enable Flatpak user namespaces
         shell: bash
