@@ -126,3 +126,20 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
+
+install(CODE "
+  if(NOT \"\$ENV{CLIPTHAT_STAGE_TOOLS}\" STREQUAL \"0\")
+    find_program(CLIPTHAT_PYTHON NAMES python3)
+    if(NOT CLIPTHAT_PYTHON)
+      message(FATAL_ERROR \"Bundled tool staging requires Python 3. Install python3 and retry the Flutter build.\")
+    endif()
+    execute_process(
+      COMMAND \"\${CLIPTHAT_PYTHON}\" \"${CMAKE_CURRENT_SOURCE_DIR}/../scripts/dev_run.py\"
+        --stage-tools \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}\"
+      RESULT_VARIABLE CLIPTHAT_STAGE_RESULT
+    )
+    if(NOT CLIPTHAT_STAGE_RESULT STREQUAL \"0\")
+      message(FATAL_ERROR \"Bundled tool staging failed (\${CLIPTHAT_STAGE_RESULT}). Resolve the Python error above and retry the Flutter build; tool downloads require network access on a cache miss.\")
+    endif()
+  endif()
+" COMPONENT Runtime)

@@ -122,62 +122,105 @@ class ClipPipeline {
           'End time exceeds the video duration (${formatTimestamp(duration.floor())}).',
         );
       }
-      String? subtitle;
+      final subtitles = <({String path, String language, String title})>[];
       if (request.includeSubtitles) {
-        try {
-          final subtitles =
-              await _tools.run(_bundledTools.executable('yt-dlp'), [
-            ..._bundledTools.ytDlpArguments,
-            '--no-playlist',
-            '--skip-download',
-            '--socket-timeout',
-            '30',
-            '--retries',
-            '3',
-            '--write-subs',
-            '--write-auto-subs',
-            '--sub-langs',
-            'en,en-orig,en-[A-Za-z]+',
-            '--sub-format',
-            'vtt',
-            '--output',
-            p.join(temporary.path.replaceAll('%', '%%'), 'captions.%(ext)s'),
-            '--',
-            request.url,
-          ]);
-          final captions = await temporary
-              .list()
-              .where((entry) => entry is File && entry.path.endsWith('.vtt'))
-              .map((entry) => entry.path)
-              .toList();
-          int preference(String path) => path.endsWith('.en.vtt')
-              ? 0
-              : path.endsWith('.en-orig.vtt')
-                  ? 2
-                  : 1;
-          captions.sort((a, b) {
-            final order = preference(a).compareTo(preference(b));
-            return order == 0 ? a.compareTo(b) : order;
-          });
-          if (subtitles.exitCode == 0 && captions.isNotEmpty) {
-            subtitle = captions.first;
-          } else {
-            final detail = subtitles.stderr.trim();
-            onWarning(detail.isEmpty
-                ? 'English subtitles are unavailable; the clip will have no subtitles.'
-                : 'English subtitles could not be downloaded; continuing without them.\n$detail');
+        for (final automatic in [
+          false,
+          if (request.includeAutomaticTranslations) true,
+        ]) {
+          final kind = automatic ? 'automatic' : 'manual';
+          try {
+            final download =
+                await _tools.run(_bundledTools.executable('yt-dlp'), [
+              ..._bundledTools.ytDlpArguments,
+              '--no-playlist',
+              '--skip-download',
+              '--socket-timeout',
+              '30',
+              '--retries',
+              '3',
+              '--ignore-errors',
+              automatic ? '--no-write-subs' : '--write-subs',
+              automatic ? '--write-auto-subs' : '--no-write-auto-subs',
+              '--sub-langs',
+              'all,-live_chat',
+              '--sub-format',
+              'vtt',
+              '--output',
+              p.join(temporary.path.replaceAll('%', '%%'),
+                  'captions-$kind.%(ext)s'),
+              '--',
+              request.url,
+            ]);
+            _ensureRunning();
+            final detail = download.stderr.trim();
+            if (download.exitCode != 0 ||
+                RegExp(r'\b(?:WARNING|ERROR):').hasMatch(detail)) {
+              onWarning('Some $kind subtitles could not be downloaded; '
+                  'continuing with available tracks.\n$detail');
+            }
+          } catch (error) {
+            _ensureRunning();
+            onWarning('Could not finish downloading $kind subtitles; '
+                'continuing with available tracks.\n$error');
           }
-        } catch (error) {
+        }
+        _ensureRunning();
+        final captions = await temporary
+            .list()
+            .where((entry) => entry is File && entry.path.endsWith('.vtt'))
+            .map((entry) => entry.path)
+            .toList();
+        captions.sort();
+        for (final path in captions) {
           _ensureRunning();
+          final name = p.basename(path);
+          final automatic = name.startsWith('captions-automatic.');
+          final prefix = automatic ? 'captions-automatic.' : 'captions-manual.';
+          if (!name.startsWith(prefix)) continue;
+          final variant = name.substring(prefix.length, name.length - 4);
+          try {
+            final probe = await _tools.run(
+              _bundledTools.executable('ffprobe'),
+              [
+                '-v',
+                'error',
+                '-show_entries',
+                'stream=codec_name',
+                '-of',
+                'json',
+                path
+              ],
+              timeout: const Duration(seconds: 30),
+            );
+            probe.requireSuccess('Unable to inspect subtitle track');
+            final data = jsonDecode(probe.stdout) as Map<String, dynamic>;
+            final streams = (data['streams'] as List<dynamic>?) ?? [];
+            if (!streams.any((stream) => stream['codec_name'] == 'webvtt')) {
+              throw const FormatException('No usable VTT subtitle stream.');
+            }
+            subtitles.add((
+              path: path,
+              language: variant.replaceFirst(RegExp(r'-orig$'), ''),
+              title: '$variant (${automatic ? 'automatic' : 'manual'})',
+            ));
+          } catch (error) {
+            _ensureRunning();
+            onWarning('Skipping unusable subtitle track $variant.\n$error');
+          }
+        }
+        if (subtitles.isEmpty) {
           onWarning(
-              'English subtitles are unavailable; continuing without them.\n$error');
+              'Subtitles are unavailable; the clip will have no subtitles.');
         }
       }
       _ensureRunning();
       onProgress(true, 0);
       final encodedPath = p.join(temporary.path, 'clip.mkv');
       _ensureRunning();
-      List<String> encodingArguments(String? subtitle) => [
+      List<String> encodingArguments(
+              List<({String path, String language, String title})> tracks) =>
+          [
             '-hide_banner',
             '-loglevel',
             'warning',
@@ -193,11 +236,11 @@ class ClipPipeline {
               '-i',
               audioPath,
             ],
-            if (subtitle != null) ...[
+            for (final track in tracks) ...[
               '-ss',
               '${request.startSeconds}',
               '-i',
-              subtitle,
+              track.path,
             ],
             '-t',
             '${request.durationSeconds}',
@@ -205,14 +248,15 @@ class ClipPipeline {
             '0:v:0',
             '-map',
             audioPath == videoPath ? '0:a:0' : '1:a:0',
-            if (subtitle != null) ...[
+            for (var index = 0; index < tracks.length; index++) ...[
               '-map',
-              audioPath == videoPath ? '1:s:0' : '2:s:0',
-              '-c:s',
-              'webvtt',
-              '-metadata:s:s:0',
-              'language=eng',
+              '${(audioPath == videoPath ? 1 : 2) + index}:s:0',
+              '-metadata:s:s:$index',
+              'language=${tracks[index].language}',
+              '-metadata:s:s:$index',
+              'title=${tracks[index].title}',
             ],
+            if (tracks.isNotEmpty) ...['-c:s', 'webvtt'],
             '-c:v',
             'libx264',
             '-preset',
@@ -243,9 +287,10 @@ class ClipPipeline {
       }
 
       var cut = await _tools.run(
-          _bundledTools.executable('ffmpeg'), encodingArguments(subtitle),
+          _bundledTools.executable('ffmpeg'), encodingArguments(subtitles),
           onStdout: encodingProgress);
-      if (cut.exitCode != 0 && subtitle != null) {
+      if (cut.exitCode != 0 && subtitles.isNotEmpty) {
+        _ensureRunning();
         onWarning(
             'Encoding with subtitles failed; retrying without subtitles.\n${cut.stderr}');
         final partial = File(encodedPath);
@@ -253,7 +298,7 @@ class ClipPipeline {
         _ensureRunning();
         onProgress(true, 0);
         cut = await _tools.run(
-            _bundledTools.executable('ffmpeg'), encodingArguments(null),
+            _bundledTools.executable('ffmpeg'), encodingArguments([]),
             onStdout: encodingProgress);
       }
       cut.requireSuccess('Clip encoding failed');

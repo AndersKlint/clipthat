@@ -14,7 +14,7 @@ All normal distributions use upstream prebuilt binaries:
 
 Record selected versions, upstream asset URLs, and available integrity/source access details with the bundle. FFmpeg and Deno version records describe the binaries selected for that build; they are not locks governing future builds. Validate tool startup and FFmpeg's required encoders on the native target, including inside the Flatpak runtime.
 
-Refresh dependencies by rebuilding the installer. Installed packages do not update their tools by themselves. `make run` and normal installer packaging share this prebuilt-tool policy; there is no development-versus-redistributable mode or manifest flag.
+Refresh installed dependencies by rebuilding the installer. Installed packages do not update their tools by themselves. Native development builds and normal installer packaging share this prebuilt-tool policy; there is no development-versus-redistributable tool selection mode.
 
 The pipeline uses no custom tool compilation/freezing, selected-version locks, broad Deno source crawler, or source URL/hash repository variables. It does not generate a complete tool source bundle; required supplier source materials may be provided separately.
 
@@ -23,7 +23,13 @@ The pipeline uses no custom tool compilation/freezing, selected-version locks, b
 - **Linux x64:** build the Flutter app inside GNOME SDK 50 for GNOME Platform 50 ABI compatibility, then bundle upstream tools. SDK commits and interpreter versions are not pinned. Run `make flatpak-setup` explicitly to install prerequisites, then `make flatpak-installer` (alias `make flatpak`).
 - **Windows x64:** use ordinary Python 3.x, Flutter stable, GNU Make, Git, Visual Studio's native desktop C++ toolchain and Windows SDK, and Inno Setup 6.3+ (`choco install innosetup --yes`). Discover `ISCC.exe` on PATH or in the standard `Inno Setup 6` directory under `ProgramFiles(x86)` / `ProgramFiles`, with no extra override. MSYS2 and exact interpreter pins are not required. Both `make windows-installer` and its alias `make windows-zip` invoke `python scripts/package_windows.py` to produce the portable ZIP and setup EXE from the same staged application, tools, licenses, and data. Setup reads its version from the built EXE using `GetFileVersion`, not release tags or pubspec parsing. It installs per-user without admin privileges; the Visual C++ runtime remains a separate prerequisite. Both assets are unsigned and provide no runtime tool updates.
 
-`make installer` / `make installers` selects the native package. `make build` performs only a Flutter native build; `make run` stages tools and launches the native app. See [root commands](../../README.md#make-commands) and [Windows setup](../windows/README.md).
+`make installer` / `make installers` selects the native package. `make build` builds a native Flutter release and stages tools on Linux; on Windows it performs only the Flutter build. `make run` builds and launches the native release app with staged tools. See [development commands](../../README.md#development) and [Windows setup](../windows/README.md).
+
+### Native development staging
+
+On Linux x64, `flutter run -d linux` and `flutter build linux` automatically stage tools in Debug, Profile, and Release. CMake's install step runs the shared `scripts/dev_run.py` staging logic after Flutter's bundle cleanup, copying complete `tools/` and `licenses/tools/` directories beside the executable. The upstream prebuilt cache at `build/dev-tools/linux-x64` is valid for 24 hours. Missing or expired caches trigger downloads at build time, requiring network access; staging failures stop the build with actionable errors.
+
+Native Windows retains `make run` staging; raw Windows Flutter builds do not stage tools. The SDK-contained Flatpak build sets `CLIPTHAT_STAGE_TOOLS=0` to skip native development staging, then packaging bundles freshly selected upstream binaries independently of the development cache. Host-native Linux bundles do not replace the SDK build required for distribution ABI compatibility. None of these build-time steps enables runtime downloads or PATH fallback.
 
 ## Licenses and source access
 

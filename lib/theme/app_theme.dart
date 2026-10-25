@@ -9,8 +9,8 @@ abstract final class AppTheme {
     final colors = ColorScheme.fromSeed(
       seedColor: const Color(0xFFAE4E53),
       brightness: brightness,
-      primary: dark ? const Color(0xFFD56D70) : const Color(0xFFAE4E53),
-      onPrimary: dark ? const Color(0xFF190606) : Colors.white,
+      primary: dark ? const Color(0xFFA93246) : const Color(0xFFA62E40),
+      onPrimary: const Color(0xFFFFF7F8),
       primaryContainer:
           dark ? const Color(0xFF303033) : const Color(0xFFECECEE),
       onPrimaryContainer:
@@ -49,7 +49,7 @@ abstract final class AppTheme {
       inverseSurface: dark ? const Color(0xFFECECEF) : const Color(0xFF29292D),
       onInverseSurface:
           dark ? const Color(0xFF29292D) : const Color(0xFFF2F2F4),
-      inversePrimary: dark ? const Color(0xFFAE4E53) : const Color(0xFFD56D70),
+      inversePrimary: dark ? const Color(0xFFA62E40) : const Color(0xFFA93246),
       primaryFixed: const Color(0xFFE5E5E9),
       primaryFixedDim: const Color(0xFFC9C9D0),
       onPrimaryFixed: const Color(0xFF202024),
@@ -91,13 +91,18 @@ abstract final class AppTheme {
       scaffoldBackgroundColor:
           dark ? const Color(0xFF141416) : const Color(0xFFF3F3F5),
       textTheme: text,
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: colors.onSurface,
+        selectionColor: colors.onSurface.withValues(alpha: 0.2),
+        selectionHandleColor: colors.onSurface,
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: colors.surfaceContainerLowest,
         border: border,
         enabledBorder: border,
         focusedBorder: border.copyWith(
-            borderSide: BorderSide(color: colors.primary, width: 2)),
+            borderSide: BorderSide(color: colors.onSurface, width: 2)),
         errorBorder:
             border.copyWith(borderSide: BorderSide(color: colors.error)),
         focusedErrorBorder: border.copyWith(
@@ -105,9 +110,24 @@ abstract final class AppTheme {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         hintStyle: TextStyle(color: colors.onSurfaceVariant),
+        floatingLabelStyle: WidgetStateTextStyle.resolveWith((states) {
+          if (states.contains(WidgetState.error)) {
+            return TextStyle(color: colors.error);
+          }
+          if (states.contains(WidgetState.disabled)) {
+            return TextStyle(color: colors.onSurface.withValues(alpha: 0.38));
+          }
+          if (states.contains(WidgetState.focused)) {
+            return TextStyle(color: colors.onSurface);
+          }
+          return TextStyle(color: colors.onSurfaceVariant);
+        }),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
+          backgroundColor: colors.primary,
+          foregroundColor: const Color(0xFFFFF7F8),
+          textStyle: text.labelLarge!.copyWith(fontWeight: FontWeight.w600),
           minimumSize: const Size(0, 44),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

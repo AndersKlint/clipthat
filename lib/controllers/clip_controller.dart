@@ -8,6 +8,7 @@ import '../models/clip_job.dart';
 import '../models/clip_request.dart';
 import '../services/bundled_tools.dart';
 import '../services/clip_pipeline.dart';
+import '../services/output_folder_preferences.dart';
 import '../services/tool_process.dart';
 
 class ToolStatus {
@@ -25,6 +26,55 @@ class ToolStatus {
 }
 
 class ClipController extends ChangeNotifier {
+  final OutputFolderPreferences _outputPreferences = OutputFolderPreferences();
+  late String _outputDirectory = defaultOutputDirectory;
+  String? _outputPreferenceError;
+  int _outputRevision = 0;
+  int _saveRevision = 0;
+  Future<void> _pendingOutputSave = Future<void>.value();
+
+  String get outputDirectory => _outputDirectory;
+  String? get outputPreferenceError => _outputPreferenceError;
+
+  Future<void> restoreOutputDirectory() async {
+    final revision = _outputRevision;
+    try {
+      final saved = await _outputPreferences.load();
+      if (_disposed || revision != _outputRevision) return;
+      if (saved != null && saved.isNotEmpty) _outputDirectory = saved;
+      _outputPreferenceError = null;
+    } catch (error) {
+      if (_disposed || revision != _outputRevision) return;
+      _outputPreferenceError =
+          'Could not restore the output folder. Choose or type a folder to save it again. $error';
+    }
+    _notify();
+  }
+
+  void editOutputDirectory(String path) {
+    _outputRevision++;
+    _outputDirectory = path;
+    commitOutputDirectory();
+  }
+
+  void commitOutputDirectory() {
+    final path = _outputDirectory;
+    if (_disposed) return;
+    final revision = ++_saveRevision;
+    _pendingOutputSave = _pendingOutputSave.then((_) async {
+      try {
+        await _outputPreferences.save(path);
+        if (_disposed || revision != _saveRevision) return;
+        _outputPreferenceError = null;
+      } catch (error) {
+        if (_disposed || revision != _saveRevision) return;
+        _outputPreferenceError =
+            'Could not remember the output folder. Your current folder is still usable. Check available disk space and app configuration permissions, then retry saving. $error';
+      }
+      _notify();
+    });
+  }
+
   final List<ClipJob> _jobs = [];
   final Set<ToolProcess> _checks = {};
   final BundledTools _bundledTools = BundledTools();

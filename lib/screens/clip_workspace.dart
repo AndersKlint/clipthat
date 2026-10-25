@@ -30,14 +30,29 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
   final _output = TextEditingController();
   final Map<TextEditingController, String> _lastInput = {};
   bool _includeSubtitles = true;
+  bool _includeAutomaticTranslations = false;
   bool _pickingDirectory = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _output.text = _controller.defaultOutputDirectory;
+    _output.text = _controller.outputDirectory;
+    unawaited(_restoreOutputDirectory());
     unawaited(_controller.checkTools());
+  }
+
+  Future<void> _restoreOutputDirectory() async {
+    await _controller.restoreOutputDirectory();
+    if (!mounted) return;
+    if (_output.text != _controller.outputDirectory) {
+      setState(() => _output.text = _controller.outputDirectory);
+    }
+  }
+
+  void _outputChanged(String value) {
+    _controller.editOutputDirectory(value);
+    _inputChanged(value);
   }
 
   void _inputChanged(String value) {
@@ -90,6 +105,8 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
         end: _end.text,
         outputDirectory: _output.text,
         includeSubtitles: _includeSubtitles,
+        includeAutomaticTranslations:
+            _includeSubtitles && _includeAutomaticTranslations,
       );
 
   ClipRequest? get _preview {
@@ -130,6 +147,7 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
       if (directory != null) {
         setState(() {
           _output.text = directory;
+          _controller.editOutputDirectory(directory);
           _error = null;
         });
       }
@@ -298,7 +316,7 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
           const SizedBox(height: 20),
           TextField(
             controller: _output,
-            onChanged: _inputChanged,
+            onChanged: _outputChanged,
             autocorrect: false,
             textInputAction: TextInputAction.done,
             onSubmitted: (_) {
@@ -321,27 +339,51 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
             ),
           ),
           const SizedBox(height: 12),
-          Tooltip(
-            message:
-                'Embed English captions when available. Missing captions do not prevent the clip from completing.',
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text('English captions',
-                      style: theme.textTheme.titleSmall),
+          Material(
+            color: colors.surface,
+            child: Column(children: [
+              Tooltip(
+                message:
+                    'Download and embed all available manual subtitle tracks in the MKV. Enable Include automatic translations to also request generated captions and automatic translations. Missing tracks warn without failing the clip. Settings are saved per queued clip.',
+                child: SwitchListTile(
+                  title: const Text('Download subs'),
+                  value: _includeSubtitles,
+                  onChanged: (value) => setState(() {
+                    _includeSubtitles = value;
+                    if (!value) _includeAutomaticTranslations = false;
+                  }),
+                  contentPadding: EdgeInsets.zero,
                 ),
-                const SizedBox(width: 8),
-                Semantics(
-                  label: 'Include English captions when available',
-                  child: Switch.adaptive(
-                    value: _includeSubtitles,
-                    onChanged: (value) =>
-                        setState(() => _includeSubtitles = value),
-                  ),
+              ),
+              Tooltip(
+                message:
+                    'Also download generated captions and automatic translations in all available languages. This can take much longer. Requires Download subs; turning subtitles off clears this selection.',
+                child: SwitchListTile(
+                  title: const Text('Include automatic translations'),
+                  value: _includeAutomaticTranslations,
+                  onChanged: _includeSubtitles
+                      ? (value) =>
+                          setState(() => _includeAutomaticTranslations = value)
+                      : null,
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
                 ),
-              ],
-            ),
+              ),
+            ]),
           ),
+          if (_controller.outputPreferenceError case final message?) ...[
+            const SizedBox(height: 12),
+            Semantics(
+              liveRegion: true,
+              child: Text(message,
+                  style:
+                      theme.textTheme.bodySmall?.copyWith(color: colors.error)),
+            ),
+            TextButton(
+              onPressed: _controller.commitOutputDirectory,
+              child: const Text('Retry saving folder'),
+            ),
+          ],
           if (_error != null) ...[
             const SizedBox(height: 20),
             Semantics(

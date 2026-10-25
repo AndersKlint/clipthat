@@ -169,8 +169,10 @@ class _JobCard extends StatelessWidget {
             children: [
               Tooltip(
                 message: job.request.includeSubtitles
-                    ? 'English captions requested'
-                    : 'Captions not requested',
+                    ? job.request.includeAutomaticTranslations
+                        ? 'This clip requests all available manual tracks, generated captions, and automatic translations for embedding in the MKV. Missing tracks warn without failing the clip.'
+                        : 'This clip requests all available manual subtitle tracks only for embedding in the MKV. Missing manual tracks warn without failing the clip.'
+                    : 'Subtitles not requested',
                 child: Text(
                   '${job.statusLabel}${job.isActive && progress != null ? ' · ${(progress * 100).round()}%' : ''}',
                   style: theme.textTheme.labelMedium!.copyWith(color: color),

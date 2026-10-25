@@ -58,24 +58,16 @@ def cached_tools(target_platform):
     return cache
 
 
-def run(flutter):
+def native_target():
     host = platform.system()
     if (host not in ("Linux", "Windows") or
             platform.machine().lower() not in ("x86_64", "amd64") or struct.calcsize("P") != 8):
-        raise ValueError("make run requires native Linux x64 or Windows x64 with 64-bit Python.")
-    target = host.lower()
-    target_platform = target + "-x64"
-    arguments = [str(flutter), "build", target, "--release"]
-    if host == "Linux":
-        arguments += ["--target-platform", target_platform]
-    subprocess.run(arguments, cwd=ROOT, check=True)
-    destination = ROOT / ("build/windows/x64/runner/Release" if host == "Windows"
-                          else "build/linux/x64/release/bundle")
-    executable = destination / ("yt_section_downloader.exe" if host == "Windows"
-                                else "yt_section_downloader")
-    if not executable.is_file():
-        raise ValueError(f"Flutter executable missing after build: {executable}")
-    cache = cached_tools(target_platform)
+        raise ValueError("Development commands require native Linux x64 or Windows x64 with 64-bit Python.")
+    return host.lower() + "-x64"
+
+
+def stage_tools(destination):
+    cache = cached_tools(native_target())
     for relative in ("tools", "licenses/tools"):
         target = destination / relative
         if any(path.is_symlink() for path in (target, *target.parents)):
@@ -85,15 +77,41 @@ def run(flutter):
         source = cache / relative
         if source.exists():
             shutil.copytree(source, target)
+    licenses = destination / "licenses"
+    licenses.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT / "LICENSE", licenses / "ClipThat-LICENSE.txt")
+    shutil.copyfile(ROOT / "THIRD_PARTY_NOTICES.md", licenses / "THIRD_PARTY_NOTICES.md")
+
+
+def run(flutter):
+    target_platform = native_target()
+    target = platform.system().lower()
+    arguments = [str(flutter), "build", target, "--release"]
+    if target == "linux":
+        arguments += ["--target-platform", target_platform]
+    subprocess.run(arguments, cwd=ROOT, check=True)
+    destination = ROOT / ("build/windows/x64/runner/Release" if target == "windows"
+                          else "build/linux/x64/release/bundle")
+    executable = destination / ("yt_section_downloader.exe" if target == "windows"
+                                else "yt_section_downloader")
+    if not executable.is_file():
+        raise ValueError(f"Flutter executable missing after build: {executable}")
+    if target == "windows":
+        stage_tools(destination)
     subprocess.run([str(executable)], cwd=ROOT, check=True)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--flutter", default="flutter")
-    parser.add_argument("--print-flutter-sdk", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--print-flutter-sdk", action="store_true")
+    mode.add_argument("--stage-tools", type=Path, metavar="DEST")
     args = parser.parse_args()
     try:
+        if args.stage_tools is not None:
+            stage_tools(args.stage_tools.absolute())
+            return
         flutter = flutter_executable(args.flutter)
         if args.print_flutter_sdk:
             sdk = flutter.parent.parent

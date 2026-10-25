@@ -132,6 +132,7 @@ def package(args):
             f"--env=HOME={home}", f"--env=PUB_CACHE={pub_cache}",
             f"--env=PATH={sdk / 'bin'}:/usr/bin:/bin", "--env=CI=true",
             f"--env=CMAKE_TOOLCHAIN_FILE={source / 'packaging' / 'linux' / 'gcc-toolchain.cmake'}",
+            "--env=CLIPTHAT_STAGE_TOOLS=0",
             "--env=FLUTTER_SUPPRESS_ANALYTICS=true", "--env=DART_SUPPRESS_ANALYTICS=true",
             build_root, sdk / "bin" / "flutter",
         ]

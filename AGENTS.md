@@ -5,8 +5,10 @@
 - Target Flutter desktop on Windows x64 (portable ZIP) and Linux x64 (Flatpak) only. Preserve the `yt_section_downloader` package and executable identity.
 - Branding: short name `ClipThat!`, full title `ClipThat! – Paste a Link. Grab Your Clip.`, studio Dr. Jetski Studios, website https://drjetski.com. Keep `!` in display names; use `com.drjetski.clipthat` for the native application ID.
 - Support YouTube downloads only.
-- Process clips sequentially: download the full source at up to 1080p into system temp, then precisely encode an H.264/AAC MKV with English VTT captions when available. Missing captions are a warning, not a failed clip.
-- Keep queue state and output-directory selection in memory; no persistence.
+- Process clips sequentially: download the full source at up to 1080p into system temp, then precisely encode an H.264/AAC MKV with all available VTT subtitle tracks when enabled. Missing captions are a warning, not a failed clip.
+- Persist only the last output-directory path, from Browse or typed edits, and restore it on launch or use platform defaults. Keep queue, theme, and subtitle state memory-only. Restored Flatpak portal paths may require Browse reselection; retain portal-based access without blanket filesystem grants.
+- Render both subtitle controls label-left/switch-right. Turning Download subs off resets automatic translations off and disables its control and label; re-enabling subtitles leaves automatic translations off.
+- Use neutral near-white field focus in dark mode and near-black in light mode; retain red validation errors and brand-colored buttons.
 - Bundle official upstream prebuilt yt-dlp (including Python/EJS), official compatible stable Deno for JavaScript challenges, and maintained BtbN GPL static stable-branch FFmpeg/FFprobe with libx264/native AAC beside the executable. Resolve latest stable yt-dlp every installer build; record selected versions rather than locking them. Refresh tools by rebuilding packages; no runtime tool downloads, updates, remote EJS, or PATH fallback.
 
 ## Implementation

@@ -28,6 +28,7 @@ class ClipRequest {
   final int startSeconds;
   final int endSeconds;
   final bool includeSubtitles;
+  final bool includeAutomaticTranslations;
 
   const ClipRequest._({
     required this.videoId,
@@ -36,6 +37,7 @@ class ClipRequest {
     required this.startSeconds,
     required this.endSeconds,
     required this.includeSubtitles,
+    required this.includeAutomaticTranslations,
   });
 
   factory ClipRequest.parse({
@@ -44,6 +46,7 @@ class ClipRequest {
     required String end,
     required String outputDirectory,
     required bool includeSubtitles,
+    required bool includeAutomaticTranslations,
   }) {
     final source = YouTubeLink.parse(url);
     final startSeconds = start.trim().isEmpty
@@ -67,6 +70,8 @@ class ClipRequest {
       startSeconds: startSeconds,
       endSeconds: endSeconds,
       includeSubtitles: includeSubtitles,
+      includeAutomaticTranslations:
+          includeSubtitles && includeAutomaticTranslations,
     );
   }
 
