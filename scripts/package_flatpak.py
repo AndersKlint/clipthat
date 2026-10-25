@@ -13,10 +13,8 @@ import tarfile
 import tempfile
 import zipfile
 
-from bundle_tools import bundle as bundle_tools, digest, write_json
-from prepare_release_tools import stage_deno, validate_deno, read_json, LOCK_PATH
+from bundle_tools import ROOT, bundle as bundle_tools, digest
 
-ROOT = Path(__file__).resolve().parents[1]
 PACKAGING = ROOT / "packaging" / "linux"
 APP_ID = "com.drjetski.clipthat"
 MANIFEST = f"{APP_ID}.json"
@@ -63,20 +61,12 @@ def package(args):
         raise ValueError("--output-dir must be inside build/ or outside the source tree.")
     if flutter.is_relative_to(output) or output.is_relative_to(flutter):
         raise ValueError("The Flutter SDK and --output-dir must not contain one another.")
-    filename = "ClipThat-linux-x64" + ("-development" if args.development else "") + ".flatpak"
+    filename = "ClipThat-linux-x64.flatpak"
     artifact = output / filename
-    source_filename = "ClipThat-linux-x64-sources.tar.gz"
-    source_artifact = output / source_filename
-    for target in [artifact, *([] if args.development else [source_artifact])]:
+    checksum = output / "SHA256SUMS-linux-x64"
+    for target in (artifact, checksum):
         if target.exists() or target.is_symlink():
             raise ValueError(f"Output already exists; move or remove it before packaging: {target}")
-    revision = None
-    if not args.development:
-        status = run(["git", "-C", ROOT, "status", "--porcelain", "--untracked-files=normal"],
-                     stdout=subprocess.PIPE, text=True).stdout.strip()
-        if status:
-            raise ValueError(f"Release requires committed application and packaging sources; working tree is dirty:\n{status}")
-        revision = run(["git", "-C", ROOT, "rev-parse", "HEAD"], stdout=subprocess.PIPE, text=True).stdout.strip()
     manifest = json.loads((PACKAGING / MANIFEST).read_text())
     for runtime in (manifest["runtime"], manifest["sdk"]):
         run(["flatpak", "info", "--arch=x86_64", f"{runtime}//{manifest['runtime-version']}"])
@@ -124,11 +114,6 @@ def package(args):
             "--env=FLUTTER_SUPPRESS_ANALYTICS=true", "--env=DART_SUPPRESS_ANALYTICS=true",
             build_root, sdk / "bin" / "flutter",
         ]
-        if not args.development:
-            run([*sdk_command[:-1], "/usr/bin/python3", "-c",
-                 "import sys; from pathlib import Path; sys.path.insert(0, 'scripts'); "
-                 "from prepare_release_tools import preflight; preflight('linux-x64', Path(sys.argv[1]))",
-                 work / "prepared-tools"])
         run([*sdk_command, "config", "--enable-linux-desktop", "--no-analytics"])
         run([*sdk_command, "precache", "--linux"])
         run([*sdk_command, "pub", "get", "--enforce-lockfile"])
@@ -137,45 +122,7 @@ def package(args):
         if not (bundle / "yt_section_downloader").is_file():
             raise ValueError(f"SDK build did not produce the expected Flutter bundle: {bundle}")
         bundle = bundle.rename(assembly / "bundle")
-        if args.development:
-            bundle_tools("linux-x64", bundle, development=True)
-        else:
-            prepared = work / "prepared-tools"
-            prepare_command = [*sdk_command[:-1], "/usr/bin/python3",
-                               source / "scripts/prepare_release_tools.py", "--platform", "linux-x64",
-                               "--destination", prepared]
-            if args.deno_materials:
-                cached = args.deno_materials.resolve()
-                materials_manifest = validate_deno(cached, read_json(LOCK_PATH))
-                materials = work / "deno-materials"
-                stage_deno(cached, materials, materials_manifest)
-                prepare_command.extend(["--deno-materials", materials])
-            run(prepare_command)
-            tools_manifest = bundle_tools("linux-x64", bundle, prepared_tools=prepared)
-            sources = work / "source-distribution"
-            sources.mkdir()
-            shutil.move(str(bundle / "tool-sources"), str(sources / "tool-sources"))
-            run(["git", "-C", ROOT, "archive", "--format=tar", f"--output={sources / 'application.tar'}", revision])
-            current_revision = run(["git", "-C", ROOT, "rev-parse", "HEAD"], stdout=subprocess.PIPE, text=True).stdout.strip()
-            status = run(["git", "-C", ROOT, "status", "--porcelain", "--untracked-files=normal"],
-                         stdout=subprocess.PIPE, text=True).stdout.strip()
-            if current_revision != revision or status:
-                raise ValueError("Application sources changed during release packaging")
-            tools_manifest["source_distribution"] = {
-                "artifact": source_filename, "location": "ClipThat-sources/tool-sources/",
-                "manifest": "ClipThat-sources/tool-sources/manifest.json",
-            }
-            write_json(bundle / "tools/manifest.json", tools_manifest)
-            provenance = {"schema": 1, "platform": "linux-x64", "application_revision": revision,
-                          "tools_manifest_sha256": digest(bundle / "tools/manifest.json"),
-                          "corresponding_source_distribution": source_filename}
-            write_json(sources / "release.json", provenance)
-            write_json(bundle / "release.json", provenance)
-            with tarfile.open(work / source_filename, "x:gz", compresslevel=6) as archive:
-                archive.add(sources, arcname="ClipThat-sources")
-            for directory in (prepared, sources, work / "deno-materials"):
-                if directory.exists():
-                    shutil.rmtree(directory)
+        bundle_tools("linux-x64", bundle)
         for directory in (sdk, pub_cache, source, home):
             if directory.exists():
                 shutil.rmtree(directory)
@@ -216,7 +163,7 @@ def package(args):
         for path in PACKAGING.iterdir():
             if path.is_file():
                 shutil.copy2(path, assembly / path.name)
-        branch = "development" if args.development else "stable"
+        branch = "stable"
         manifest["branch"] = branch
         (assembly / MANIFEST).write_text(json.dumps(manifest, indent=2) + "\n")
         repository = output / "repo"
@@ -251,12 +198,11 @@ def package(args):
         ])
         if staged_artifact.stat().st_size >= 2 * 1024**3:
             raise ValueError(f"Release asset must be smaller than 2 GiB: {filename}")
-        if not args.development and (work / source_filename).stat().st_size >= 2 * 1024**3:
-            raise ValueError(f"Release asset must be smaller than 2 GiB: {source_filename}")
+        staged_checksum = work / checksum.name
+        staged_checksum.write_text(f"{digest(staged_artifact)}  {filename}\n", encoding="utf-8")
         published = []
         try:
-            for staged, target in [(staged_artifact, artifact),
-                                   *([] if args.development else [(work / source_filename, source_artifact)])]:
+            for staged, target in ((staged_artifact, artifact), (staged_checksum, checksum)):
                 with staged.open("rb") as src, target.open("xb") as dst:
                     published.append(target)
                     shutil.copyfileobj(src, dst)
@@ -265,22 +211,16 @@ def package(args):
                 target.unlink()
             raise
     print(f"Flatpak bundle: {artifact}\nFlatpak repository: {output / 'repo'}")
-    if not args.development:
-        print(f"Source distribution: {source_artifact}")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Build ClipThat! inside the pinned Flatpak SDK and export an x86_64 Flatpak."
+        description="Build ClipThat! inside GNOME SDK 50 and export an x86_64 Flatpak."
     )
     parser.add_argument("--flutter-sdk", required=True, type=Path)
     parser.add_argument("--output-dir", type=Path, default=ROOT / "build" / "flatpak")
-    parser.add_argument("--deno-materials", type=Path)
-    parser.add_argument("--development", action="store_true")
     args = parser.parse_args()
     try:
-        if args.development and args.deno_materials:
-            raise ValueError("--deno-materials cannot be combined with --development")
         package(args)
     except PermissionError as error:
         print(

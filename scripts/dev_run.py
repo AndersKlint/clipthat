@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime, timezone
 import json
 import platform
 from pathlib import Path
@@ -7,10 +8,14 @@ import struct
 import subprocess
 import tempfile
 
-from bundle_tools import LOCK_PATH, ROOT, bundle, digest, safe_name
+from bundle_tools import ROOT, bundle, digest, safe_name
 
 
 def flutter_executable(value):
+    if platform.system() == "Windows":
+        candidate = Path(value)
+        if candidate.name.lower() in ("flutter", "flutter.bat"):
+            value = str(candidate.with_name("flutter.bat"))
     executable = shutil.which(value)
     if executable is None:
         raise ValueError(f"Flutter executable not found: {value}. Set FLUTTER to its path.")
@@ -18,25 +23,34 @@ def flutter_executable(value):
 
 
 def cached_tools(target_platform):
-    key = target_platform + "-" + digest(LOCK_PATH) + "-" + digest(ROOT / "scripts/bundle_tools.py")
     parent = ROOT / "build/dev-tools"
     parent.mkdir(parents=True, exist_ok=True)
-    cache = parent / key
+    cache = parent / target_platform
+    if cache.is_symlink():
+        raise ValueError(f"Refusing a symlinked development tool cache: {cache}")
+    if cache.exists():
+        manifest = json.loads((cache / "tools/manifest.json").read_text(encoding="utf-8"))
+        age = datetime.now(timezone.utc) - datetime.fromisoformat(manifest["created_utc"])
+        if age.total_seconds() < 0 or age.total_seconds() >= 86400:
+            shutil.rmtree(cache)
     if not cache.exists():
         with tempfile.TemporaryDirectory(prefix=".staging-", dir=parent) as temporary:
             staged = Path(temporary) / "bundle"
             staged.mkdir()
-            bundle(target_platform, staged, development=True)
+            bundle(target_platform, staged)
             staged.rename(cache)
     manifest = json.loads((cache / "tools/manifest.json").read_text(encoding="utf-8"))
-    if (manifest["lock_sha256"] != digest(LOCK_PATH) or
-            manifest["bundler_sha256"] != digest(ROOT / "scripts/bundle_tools.py") or
-            manifest["platform"] != target_platform or
-            manifest["development"] is not True or manifest["redistributable"] is not False):
+    if manifest["platform"] != target_platform:
         raise ValueError(f"Invalid development tool cache; remove {cache} and retry.")
-    lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
-    for name, component in lock["components"].items():
-        for filename in component["assets"][target_platform]["files"].values():
+    suffix = ".exe" if target_platform == "windows-x64" else ""
+    expected = {"yt-dlp": {"yt-dlp" + suffix}, "ffmpeg": {"ffmpeg" + suffix, "ffprobe" + suffix},
+                "deno": {"deno" + suffix}}
+    if set(manifest["components"]) != set(expected):
+        raise ValueError(f"Invalid development tool cache; remove {cache} and retry.")
+    for name, filenames in expected.items():
+        if set(manifest["components"][name]["files"]) != filenames:
+            raise ValueError(f"Invalid development tool cache; remove {cache} and retry.")
+        for filename in filenames:
             relative = safe_name(filename)
             path = cache / "tools" / relative
             if digest(path) != manifest["components"][name]["files"][filename]:
@@ -60,7 +74,7 @@ def run(flutter):
     if not executable.is_file():
         raise ValueError(f"Flutter executable missing after build: {executable}")
     cache = cached_tools(target_platform)
-    for relative in ("tools", "licenses/tools", "tool-sources"):
+    for relative in ("tools", "licenses/tools"):
         target = destination / relative
         if any(path.is_symlink() for path in (target, *target.parents)):
             raise ValueError(f"Refusing a symlinked development bundle path: {target}")
@@ -81,7 +95,7 @@ def main():
         flutter = flutter_executable(args.flutter)
         if args.print_flutter_sdk:
             sdk = flutter.parent.parent
-            if not (sdk / "bin/flutter").is_file():
+            if not (sdk / "bin" / ("flutter.bat" if platform.system() == "Windows" else "flutter")).is_file():
                 raise ValueError("Cannot detect Flutter SDK from executable; set FLUTTER_SDK explicitly.")
             print(sdk)
         else:

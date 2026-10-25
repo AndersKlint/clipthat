@@ -7,7 +7,7 @@
 - Support YouTube downloads only.
 - Process clips sequentially: download the full source at up to 1080p into system temp, then precisely encode an H.264/AAC MKV with English VTT captions when available. Missing captions are a warning, not a failed clip.
 - Keep queue state and output-directory selection in memory; no persistence.
-- Bundle pinned standalone `yt-dlp`, `ffmpeg`, `ffprobe`, and Deno beside the executable; release yt-dlp is a custom minimal standalone with official EJS. Require libx264 and AAC encoding support. No runtime tool downloads, updates, remote EJS, or PATH fallback.
+- Bundle official upstream prebuilt yt-dlp (including Python/EJS), official compatible stable Deno for JavaScript challenges, and maintained BtbN GPL static stable-branch FFmpeg/FFprobe with libx264/native AAC beside the executable. Resolve latest stable yt-dlp every installer build; record selected versions rather than locking them. Refresh tools by rebuilding packages; no runtime tool downloads, updates, remote EJS, or PATH fallback.
 
 ## Implementation
 
@@ -22,7 +22,8 @@
 
 - When changing the download/tool contract, runtime dependencies, or packaging, read and update `requirements.md`.
 - When changing setup, supported platforms, or developer commands, read and update `README.md`.
-- For tool staging or release changes, follow `packaging/tools/README.md` and the platform packaging scripts: automated native tool builds and Deno material collection, matching source distributions and notices. Distinguish provenance collection from license-specific source obligations; manifest validation is not legal certification. Development bundles are not redistributable.
+- For tool staging or packaging changes, read `packaging/tools/README.md` and the platform packaging scripts. Use upstream prebuilts without custom tool builds/freezing, version locks, Deno source crawling, development/redistributable flags, or tool source archive outputs. Include upstream notices and source access records where available; actual license obligations remain, and records are not legal certification or a guarantee of compliance. Preserve `packaging/tools/*review.md` as historical findings.
+- Use ordinary Python 3.x and Flutter stable with native Windows tooling; build Linux Flutter inside GNOME SDK 50 for runtime ABI compatibility, without SDK commit/interpreter pins. Keep prerequisite installation explicit through `make flatpak-setup`. Manual workflows upload binary packages and checksums as Actions artifacts without tag requirements or release publication.
 
 ## Workflow
 

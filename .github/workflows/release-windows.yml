@@ -1,14 +1,7 @@
-name: Release Windows
+name: Build Windows installer
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing release tag (for example v0.5.0-beta)
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -16,90 +9,30 @@ permissions:
 jobs:
   build:
     runs-on: windows-2022
-    timeout-minutes: 240
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-    outputs:
-      tag: ${{ steps.release.outputs.tag }}
-      version: ${{ steps.release.outputs.version }}
-      prerelease: ${{ steps.release.outputs.prerelease }}
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: refs/tags/${{ env.RELEASE_TAG }}
-          fetch-depth: 0
           persist-credentials: false
+
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        id: python
         with:
-          python-version: '3.13.17'
+          python-version: '3.x'
           architecture: x64
-      - name: Validate existing release tag
-        id: release
-        shell: pwsh
-        env:
-          RELEASE_PYTHON: ${{ steps.python.outputs.python-path }}
-        run: '& "$env:RELEASE_PYTHON" scripts/release_ci.py validate-tag --tag "$env:RELEASE_TAG"'
+
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
-          flutter-version: '3.47.2'
           channel: stable
-      - name: Set up UCRT64 source-build tools
-        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e
-        with:
-          msystem: UCRT64
-          path-type: inherit
-          update: true
-          install: >-
-            mingw-w64-ucrt-x86_64-gcc
-            mingw-w64-ucrt-x86_64-meson
-            mingw-w64-ucrt-x86_64-ninja
-            mingw-w64-ucrt-x86_64-pkgconf
-            mingw-w64-ucrt-x86_64-binutils
-            make perl diffutils coreutils bash
-      - name: Build redistributable Windows package
-        timeout-minutes: 180
-        shell: msys2 {0}
-        env:
-          RELEASE_PYTHON: ${{ steps.python.outputs.python-path }}
-        run: |
-          set -euo pipefail
-          release_python="$(cygpath -u "$RELEASE_PYTHON")"
-          "$release_python" scripts/package_windows.py --output-dir dist/windows-x64
-      - name: Name platform checksum asset
+
+      - name: Build Windows portable ZIP
         shell: pwsh
-        run: Move-Item -LiteralPath dist/windows-x64/SHA256SUMS -Destination dist/windows-x64/SHA256SUMS-windows-x64
+        run: python scripts/package_windows.py --output-dir dist/windows-x64
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: clipthat-windows-x64-${{ steps.release.outputs.tag }}
+          name: clipthat-windows-x64
           if-no-files-found: error
           compression-level: 0
           path: |
             dist/windows-x64/ClipThat-windows-x64.zip
-            dist/windows-x64/ClipThat-windows-x64-sources.zip
             dist/windows-x64/SHA256SUMS-windows-x64
-
-  publish:
-    needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: write
-    concurrency:
-      group: clipthat-release-${{ needs.build.outputs.tag }}
-      cancel-in-progress: false
-    steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: clipthat-windows-x64-${{ needs.build.outputs.tag }}
-          path: release-assets
-      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
-        with:
-          tag_name: ${{ needs.build.outputs.tag }}
-          name: ClipThat! ${{ needs.build.outputs.tag }}
-          prerelease: ${{ needs.build.outputs.prerelease == 'true' }}
-          fail_on_unmatched_files: true
-          files: |
-            release-assets/ClipThat-windows-x64.zip
-            release-assets/ClipThat-windows-x64-sources.zip
-            release-assets/SHA256SUMS-windows-x64

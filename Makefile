@@ -10,7 +10,11 @@ HOST_PLATFORM := linux
 HOST_PACKAGE := flatpak
 endif
 
+ifeq ($(OS),Windows_NT)
+FLUTTER ?= flutter.bat
+else
 FLUTTER ?= flutter
+endif
 FLUTTER_SDK ?= $(shell "$(PYTHON)" scripts/dev_run.py --flutter "$(FLUTTER)" --print-flutter-sdk)
 ifeq ($(OS),Windows_NT)
 OUTPUT_DIR ?= dist/windows-x64
@@ -18,10 +22,10 @@ else
 OUTPUT_DIR ?= build/flatpak
 endif
 
-.PHONY: help run build installer installers flatpak flatpak-dev windows-zip flatpak-setup
+.PHONY: help run build installer installers flatpak flatpak-installer windows-installer windows-zip flatpak-setup
 
 help:
-	@"$(PYTHON)" -c "print('ClipThat! developer commands\n\n  make run            Build and launch native Linux/Windows x64 with cached development tools\n  make build          Native host release build (Flutter only)\n  make installer      Host release package with automatic tool builds and matching sources\n  make installers     Alias for installer\n  make flatpak        Linux release Flatpak and matching source archive\n  make flatpak-dev    Non-redistributable development Flatpak with prebuilt tools\n  make windows-zip    Windows portable ZIP, source ZIP and SHA256SUMS (Windows only)\n  make flatpak-setup  Explicitly install user GNOME Platform + locked SDK 50 from Flathub\n\nVariables: PYTHON, FLUTTER, FLUTTER_SDK, OUTPUT_DIR\nDefaults: Python python3 on Linux / python on Windows; Flutter on PATH;\nFlutter SDK detected from resolved executable;\noutput build/flatpak on Linux / dist/windows-x64 on Windows.')"
+	@"$(PYTHON)" -c "print('ClipThat! developer commands\n\n  make run                Build and launch with bundled upstream tools\n  make build              Native host Flutter release build\n  make installer          Native installer with upstream tools and checksums\n  make installers         Alias for installer\n  make flatpak-installer  Linux Flatpak built inside GNOME SDK 50\n  make flatpak            Alias for flatpak-installer\n  make windows-installer  Windows portable ZIP\n  make windows-zip        Alias for windows-installer\n  make flatpak-setup      Install current GNOME Platform + SDK 50 from Flathub\n\nVariables: PYTHON, FLUTTER, FLUTTER_SDK, OUTPUT_DIR\nDefaults: Python python3 on Linux / python on Windows; Flutter on PATH;\nFlutter SDK detected from resolved executable;\noutput build/flatpak on Linux / dist/windows-x64 on Windows.')"
 
 run:
 	"$(PYTHON)" scripts/dev_run.py --flutter "$(FLUTTER)"
@@ -31,16 +35,12 @@ build:
 
 installer installers: $(HOST_PACKAGE)
 
-flatpak:
+flatpak flatpak-installer:
 	"$(PYTHON)" scripts/package_flatpak.py --flutter-sdk "$(FLUTTER_SDK)" --output-dir "$(OUTPUT_DIR)"
 
-flatpak-dev:
-	"$(PYTHON)" scripts/package_flatpak.py --flutter-sdk "$(FLUTTER_SDK)" --development --output-dir "$(OUTPUT_DIR)"
-
-windows-zip:
+windows-zip windows-installer:
 	"$(PYTHON)" scripts/package_windows.py --output-dir "$(OUTPUT_DIR)"
 
 flatpak-setup:
 	flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 	flatpak install --user --noninteractive -y --arch=x86_64 flathub org.gnome.Platform//50 org.gnome.Sdk//50
-	flatpak update --user --noninteractive -y --commit="$(shell "$(PYTHON)" -c "import json; from pathlib import Path; print(json.loads(Path('packaging/tools/downloader-lock.json').read_text(encoding='utf-8'))['linux_sdks'][0]['sdk_commit'])")" org.gnome.Sdk/x86_64/50

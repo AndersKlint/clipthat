@@ -3,18 +3,18 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import re
 import shutil
 import stat
-import subprocess
 import tarfile
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LOCK_PATH = ROOT / "packaging/tools/lock.json"
 MAX_DOWNLOAD = 512 * 1024 * 1024
 MAX_EXPANDED = 2 * 1024 * 1024 * 1024
 MAX_ENTRIES = 20000
@@ -46,55 +46,128 @@ def safe_name(value):
     return path
 
 
-def download(record, target, limit=MAX_DOWNLOAD):
-    if not record["url"].startswith("https://"):
+def fetch(url, limit=8 * 1024 * 1024):
+    with open_url(url) as response:
+        data = response.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError(f"Response exceeds {limit} bytes: {url}")
+    return data
+
+
+def open_url(url):
+    if not url.startswith("https://"):
         raise ValueError("Only HTTPS upstream URLs are permitted")
-    request = urllib.request.Request(record["url"], headers={"User-Agent": "ClipThat-packaging/1"})
-    with urllib.request.urlopen(request, timeout=60) as response, target.open("xb") as output:
-        if not response.url.startswith("https://"):
-            raise ValueError("Upstream redirected to an insecure URL")
+    request = urllib.request.Request(url, headers={"User-Agent": "ClipThat-packaging/1"})
+    response = urllib.request.urlopen(request, timeout=60)
+    if not response.url.startswith("https://"):
+        response.close()
+        raise ValueError("Upstream redirected to an insecure URL")
+    return response
+
+
+def download(record, target):
+    with open_url(record["url"]) as response, target.open("xb") as output:
         count = 0
         while block := response.read(1024 * 1024):
             count += len(block)
-            if count > limit:
-                raise ValueError(f"Download exceeds {limit} bytes: {record['url']}")
+            if count > MAX_DOWNLOAD:
+                raise ValueError(f"Download exceeds {MAX_DOWNLOAD} bytes")
             output.write(block)
     if digest(target) != record["sha256"]:
         raise ValueError(f"Upstream SHA256 mismatch: {record['url']}")
 
 
-def extract_binaries(archive, asset, destination):
-    expected = asset["files"]
-    found = set()
-    seen = set()
-    expanded = 0
-    count = 0
+def release(repo):
+    result = json.loads(fetch(f"https://api.github.com/repos/{repo}/releases/latest"))
+    if result["draft"] or result["prerelease"]:
+        raise ValueError(f"No stable release returned for {repo}")
+    return result
 
-    def accept(name, size, regular, directory):
-        nonlocal expanded, count
+
+def asset_record(release_data, name):
+    assets = {a["name"]: a for a in release_data["assets"]}
+    asset = assets[name]
+    published = asset.get("digest") or ""
+    if re.fullmatch(r"sha256:[0-9a-fA-F]{64}", published):
+        checksum = published[7:].lower()
+        verification = "GitHub asset digest"
+    else:
+        checksum = None
+        for candidate in (name + ".sha256sum", "SHA2-256SUMS", "checksums.sha256"):
+            if candidate not in assets:
+                continue
+            for line in fetch(assets[candidate]["browser_download_url"]).decode("utf-8").splitlines():
+                match = re.fullmatch(r"([0-9a-fA-F]{64})\s+\*?(.+)", line.strip())
+                if match and match[2] == name:
+                    checksum = match[1].lower()
+                    verification = assets[candidate]["browser_download_url"]
+                    break
+            if checksum:
+                break
+        if not checksum:
+            raise ValueError(f"No published SHA256 for {name}")
+    return {"url": asset["browser_download_url"], "sha256": checksum,
+            "asset": name, "verification": verification, "asset_id": asset["id"]}
+
+
+def select_assets(platform):
+    if platform not in ("linux-x64", "windows-x64"):
+        raise ValueError(f"Unsupported platform: {platform}")
+    windows = platform == "windows-x64"
+    downloader = release("yt-dlp/yt-dlp")
+    deno = release("denoland/deno")
+    media = release("BtbN/FFmpeg-Builds")
+    arch, extension = ("win64", "zip") if windows else ("linux64", "tar.xz")
+    pattern = rf"ffmpeg-n(\d+(?:\.\d+)+)-latest-{arch}-gpl-\1\.{re.escape(extension)}"
+    candidates = [(tuple(map(int, match[1].split("."))), asset["name"])
+                  for asset in media["assets"]
+                  if (match := re.fullmatch(pattern, asset["name"]))]
+    if not candidates:
+        raise ValueError(f"No BtbN stable-branch static GPL asset for {platform}")
+    branch, media_name = max(candidates)
+    suffix = ".exe" if windows else ""
+    return {
+        "yt-dlp": (downloader, "yt-dlp.exe" if windows else "yt-dlp_linux", "file",
+                   {"yt-dlp" + suffix: "yt-dlp" + suffix}, downloader["tag_name"]),
+        "ffmpeg": (media, media_name, extension,
+                   {"bin/" + name + suffix: name + suffix for name in ("ffmpeg", "ffprobe")},
+                   "release/" + ".".join(map(str, branch)) + " " + media["published_at"]),
+        "deno": (deno, "deno-x86_64-" + ("pc-windows-msvc" if windows else "unknown-linux-gnu") + ".zip",
+                 "zip", {"deno" + suffix: "deno" + suffix}, deno["tag_name"]),
+    }
+
+
+def extract_binaries(archive, archive_format, expected, destination, notices):
+    if archive_format == "file":
+        shutil.copyfile(archive, destination / next(iter(expected.values())))
+        return
+    seen, found = set(), set()
+    expanded = 0
+
+    def target_for(name, size, regular, directory):
+        nonlocal expanded
         path = safe_name(name.rstrip("/"))
         key = str(path).casefold()
-        count += 1
         expanded += size
-        if count > MAX_ENTRIES or expanded > MAX_EXPANDED or size < 0:
-            raise ValueError("Archive exceeds extraction limits")
-        if key in seen:
-            raise ValueError(f"Duplicate archive member: {name}")
+        if key in seen or len(seen) >= MAX_ENTRIES or size < 0 or expanded > MAX_EXPANDED:
+            raise ValueError(f"Duplicate member or archive extraction limit: {name}")
         seen.add(key)
         if not regular and not directory:
             raise ValueError(f"Archive contains link or special file: {name}")
         if not regular:
             return None
-        matches = [source for source in expected if str(path) == source or
-                   (len(path.parts) == len(PurePosixPath(source).parts) + 1 and
-                    "/".join(path.parts[1:]) == source)]
-        if not matches:
-            return None
-        source = matches[0]
-        if source in found:
-            raise ValueError(f"Ambiguous executable in archive: {source}")
-        found.add(source)
-        return destination / expected[source]
+        relative = "/".join(path.parts[1:])
+        source = str(path) if str(path) in expected else relative
+        if source in expected:
+            if source in found:
+                raise ValueError(f"Ambiguous executable: {source}")
+            found.add(source)
+            return destination / expected[source]
+        if any(re.search(r"license|copying|notice|readme", part, re.I) for part in path.parts):
+            target = notices.joinpath(*path.parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            return target
+        return None
 
     def copy(stream, target, size):
         with stream, target.open("xb") as output:
@@ -106,141 +179,113 @@ def extract_binaries(archive, asset, destination):
                 output.write(block)
                 remaining -= len(block)
 
-    if asset["format"] == "file":
-        shutil.copyfile(archive, destination / next(iter(expected.values())))
-        return
-    if asset["format"] == "zip":
+    if archive_format == "zip":
         with zipfile.ZipFile(archive) as source:
             for member in source.infolist():
                 mode = member.external_attr >> 16
                 regular = not member.is_dir() and stat.S_IFMT(mode) in (0, stat.S_IFREG)
-                target = accept(member.filename, member.file_size, regular, member.is_dir())
+                target = target_for(member.filename, member.file_size, regular, member.is_dir())
                 if target:
                     copy(source.open(member), target, member.file_size)
-    elif asset["format"] == "tar.xz":
+    elif archive_format == "tar.xz":
         with tarfile.open(archive, "r|xz") as source:
             for member in source:
-                target = accept(member.name, member.size, member.isfile(), member.isdir())
+                target = target_for(member.name, member.size, member.isfile(), member.isdir())
                 if target:
                     copy(source.extractfile(member), target, member.size)
     else:
-        raise ValueError(f"Unsupported archive format: {asset['format']}")
+        raise ValueError(f"Unsupported archive format: {archive_format}")
     if found != set(expected):
         raise ValueError(f"Archive missing executables: {set(expected) - found}")
 
 
-def bundle(platform, destination, prepared_tools=None, development=False, deno_materials=None):
-    from prepare_release_tools import link_or_copy, prepare, validate_prepared
+def retain_notices(name, release_data, directory):
+    repo = {"yt-dlp": "yt-dlp/yt-dlp", "deno": "denoland/deno",
+            "ffmpeg": "BtbN/FFmpeg-Builds"}[name]
+    tag = urllib.parse.quote(release_data["tag_name"], safe="")
+    filenames = {"yt-dlp": ("LICENSE", "THIRD_PARTY_LICENSES.txt"),
+                 "deno": ("LICENSE.md", "cli/tsc/dts/node/LICENSE",
+                          "cli/tsc/dts/node/undici/LICENSE", "ext/webgpu/LICENSE.md"),
+                 "ffmpeg": ("LICENSE", "README.md")}[name]
+    records = []
+    for filename in filenames:
+        url = f"https://raw.githubusercontent.com/{repo}/{tag}/{filename}"
+        data = fetch(url)
+        target = directory / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        records.append({"url": url, "file": filename, "sha256": digest(target)})
+    return records
 
-    lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
-    if development and (prepared_tools is not None or deno_materials is not None):
-        raise ValueError("--development cannot be combined with release inputs")
-    if prepared_tools is not None and deno_materials is not None:
-        raise ValueError("--deno-materials is only used when generating prepared tools")
-    destination = destination.absolute()
+
+def bundle(platform, destination):
+    destination = Path(destination).absolute()
     if not destination.is_dir() or destination.is_symlink():
-        raise ValueError("--destination must be an existing Flutter bundle directory, not a symlink")
-    paths = [destination / "tools", destination / "licenses/tools", destination / "tool-sources"]
+        raise ValueError("--destination must be an existing bundle directory, not a symlink")
+    paths = [destination / "tools", destination / "licenses/tools"]
     if any(p.exists() or p.is_symlink() for p in paths):
-        raise ValueError("Refusing to replace existing tools/, licenses/tools/, or tool-sources/")
+        raise ValueError("Refusing to replace existing tools/ or licenses/tools/")
     if (destination / "licenses").is_symlink():
         raise ValueError("Refusing a symlinked licenses directory")
+    selected = select_assets(platform)
     with tempfile.TemporaryDirectory(prefix=".clipthat-tools-", dir=destination) as temporary:
         stage = Path(temporary)
-        tools = stage / "tools"
-        licenses = stage / "licenses"
+        tools, licenses = stage / "tools", stage / "licenses"
         tools.mkdir()
         licenses.mkdir()
-        if not development:
-            if prepared_tools is None:
-                prepared_tools = stage / "prepared"
-                prepare(platform, prepared_tools, deno_materials)
-            manifest = validate_prepared(prepared_tools, platform)
-            for source, target in [(prepared_tools / "tools", tools),
-                                   (prepared_tools / "licenses/tools", licenses),
-                                   (prepared_tools / "tool-sources", stage / "tool-sources")]:
-                shutil.copytree(source, target, dirs_exist_ok=True, copy_function=link_or_copy)
-            for record in manifest["payload"]:
-                relative = record["path"]
-                target = (licenses / relative.removeprefix("licenses/tools/")
-                          if relative.startswith("licenses/tools/") else stage / relative)
-                if digest(target) != record["sha256"]:
-                    raise ValueError(f"Prepared payload changed while staging: {relative}")
-            (tools / "manifest.json").unlink()
-            write_json(tools / "manifest.json", manifest)
-            (destination / "licenses").mkdir(exist_ok=True)
-            installed = []
-            try:
-                for source, target in [(tools, paths[0]), (licenses, paths[1]),
-                                       (stage / "tool-sources", paths[2])]:
-                    if target.exists() or target.is_symlink():
-                        raise ValueError(f"Destination appeared during staging: {target}")
-                    source.rename(target)
-                    installed.append(target)
-            except BaseException:
-                for target in reversed(installed):
-                    shutil.rmtree(target)
-                raise
-            return manifest
-        manifest = {
-            "schema": 1, "platform": platform,
-            "development": development, "redistributable": not development,
-            "created_utc": datetime.now(timezone.utc).isoformat(),
-            "lock_sha256": digest(LOCK_PATH), "lock": lock,
-            "bundler_sha256": digest(Path(__file__)),
-            "components": {},
-        }
-        for name, component in lock["components"].items():
-            asset = component["assets"][platform]
-            archive = stage / f"{name}.download"
-            print(f"Downloading verified {name} {component['version']} ({platform})", flush=True)
-            download(asset, archive)
-            extract_binaries(archive, asset, tools)
+        manifest = {"platform": platform, "created_utc": datetime.now(timezone.utc).isoformat(),
+                    "components": {}}
+        for name, (release_data, asset_name, archive_format, files, version) in selected.items():
+            record = asset_record(release_data, asset_name)
+            archive = stage / (name + ".download")
+            print(f"Downloading verified {name} {version} ({platform})", flush=True)
+            download(record, archive)
             notice_dir = licenses / name
-            notice_dir.mkdir(exist_ok=True)
-            for notice in component["notices"]:
-                download(notice, notice_dir / notice["name"], 8 * 1024 * 1024)
+            notice_dir.mkdir()
+            extract_binaries(archive, archive_format, files, tools, notice_dir)
+            notices = retain_notices(name, release_data, notice_dir)
             installed = {}
-            for filename in asset["files"].values():
+            for filename in files.values():
                 path = tools / filename
                 if platform == "linux-x64":
                     path.chmod(0o755)
                 installed[filename] = digest(path)
-            manifest["components"][name] = {"version": component["version"], "files": installed}
-        shutil.copyfile(LOCK_PATH, licenses / "lock.json")
-        shutil.copyfile(ROOT / "packaging/tools/README.md", licenses / "BUNDLING.md")
+            metadata = {"version": version, "files": installed, "download": record,
+                        "release": release_data["html_url"], "source": release_data["tarball_url"],
+                        "notices": notices}
+            if name == "ffmpeg":
+                metadata["source_access"] = {
+                    "build_recipes": "https://github.com/BtbN/FFmpeg-Builds/tree/latest/scripts.d",
+                    "ffmpeg": "https://git.ffmpeg.org/ffmpeg.git",
+                    "branch": version.split()[0]}
+                metadata["source_obligations"] = "GPL corresponding sources and build scripts must be supplied as required; upstream references alone do not fulfill those obligations."
+            manifest["components"][name] = metadata
+            write_json(notice_dir / "upstream.json", metadata)
         write_json(tools / "manifest.json", manifest)
-        installed = []
+        installed_paths = []
         try:
             (destination / "licenses").mkdir(exist_ok=True)
-            for src, target in [(tools, paths[0]), (licenses, paths[1])]:
+            for source, target in ((tools, paths[0]), (licenses, paths[1])):
                 if target.exists() or target.is_symlink():
                     raise ValueError(f"Destination appeared during staging: {target}")
-                target.mkdir()
-                installed.append(target)
-                for child in src.iterdir():
-                    shutil.move(str(child), str(target / child.name))
+                source.rename(target)
+                installed_paths.append(target)
         except BaseException:
-            for target in reversed(installed):
+            for target in reversed(installed_paths):
                 shutil.rmtree(target)
             raise
     return manifest
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Stage pinned offline tools beside a Flutter executable.")
+    parser = argparse.ArgumentParser(description="Stage current upstream offline tools beside a Flutter executable.")
     parser.add_argument("--platform", required=True, choices=("linux-x64", "windows-x64"))
     parser.add_argument("--destination", required=True, type=Path)
-    parser.add_argument("--prepared-tools", type=Path)
-    parser.add_argument("--deno-materials", type=Path)
-    parser.add_argument("--development", action="store_true", help="Stage pinned upstream prebuilt tools; mark bundle non-redistributable")
     args = parser.parse_args()
     try:
-        bundle(args.platform, args.destination, args.prepared_tools, args.development, args.deno_materials)
+        bundle(args.platform, args.destination)
     except PermissionError as error:
         parser.exit(1, f"Permission denied: {error.filename}. Whitelist its directory via nano ~/.config/firejail/strict-dev.profile\n")
-    except subprocess.SubprocessError as error:
-        parser.exit(1, f"Native tool preparation failed: {error}\n")
     except (OSError, ValueError, KeyError, TypeError, tarfile.TarError, zipfile.BadZipFile, urllib.error.URLError) as error:
         parser.exit(1, f"Bundling failed: {error}\n")
 
