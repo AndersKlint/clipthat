@@ -17,6 +17,8 @@ from bundle_tools import ROOT, bundle as bundle_tools, digest
 PACKAGING = ROOT / "packaging" / "linux"
 APP_ID = "com.drjetski.clipthat"
 MANIFEST = f"{APP_ID}.json"
+LLVM_EXTENSION = "org.freedesktop.Sdk.Extension.llvm21"
+LLVM_BRANCH = "25.08"
 
 
 def run(arguments, **kwargs):
@@ -91,15 +93,13 @@ def package(args):
     manifest = json.loads((PACKAGING / MANIFEST).read_text())
     for runtime in (manifest["runtime"], manifest["sdk"]):
         run(["flatpak", "info", "--arch=x86_64", f"{runtime}//{manifest['runtime-version']}"])
-    run([
-        "flatpak", "run", "--arch=x86_64", "--unshare=network", "--command=sh",
-        f"{manifest['sdk']}//{manifest['runtime-version']}", "-c",
-        'for compiler in /usr/bin/gcc /usr/bin/g++; do '
-        'if [ ! -x "$compiler" ]; then '
-        'printf "Missing SDK compiler: %s. Reinstall %s from Flathub before packaging.\\n" '
-        '"$compiler" "$1" >&2; exit 1; fi; done',
-        "compiler-preflight", f"{manifest['sdk']}//{manifest['runtime-version']}",
-    ])
+    extension = f"{LLVM_EXTENSION}//{LLVM_BRANCH}"
+    installed = run(
+        ["flatpak", "list", "--runtime", "--columns=ref"],
+        stdout=subprocess.PIPE, text=True,
+    ).stdout.splitlines()
+    if f"{LLVM_EXTENSION}/x86_64/{LLVM_BRANCH}" not in installed:
+        raise ValueError(f"Missing SDK compiler extension {extension}; run make flatpak-setup.")
     output.mkdir(parents=True, exist_ok=True)
     report_storage(output)
     with tempfile.TemporaryDirectory(prefix="work-", dir=output) as temporary:
@@ -111,6 +111,22 @@ def package(args):
         pub_cache = work / "pub-cache"
         home.mkdir()
         assembly.mkdir()
+        build_root = work / "sdk-build"
+        run([
+            "flatpak", "build-init", "--arch=x86_64", "--writable-sdk",
+            f"--sdk-extension={LLVM_EXTENSION}", build_root, f"{APP_ID}.Build",
+            manifest["sdk"], manifest["runtime"], manifest["runtime-version"],
+        ])
+        run([
+            "flatpak", "build", "--unshare=network",
+            "--env=LD_LIBRARY_PATH=/usr/lib/sdk/llvm21/lib", build_root, "sh", "-c",
+            'for compiler in /usr/lib/sdk/llvm21/bin/clang /usr/lib/sdk/llvm21/bin/clang++; do '
+            'if [ ! -x "$compiler" ]; then '
+            'printf "Missing SDK compiler: %s. Run make flatpak-setup or reinstall %s.\\n" '
+            '"$compiler" "$1" >&2; exit 1; fi; '
+            '"$compiler" --version || exit; done',
+            "compiler-preflight", extension,
+        ])
         shutil.copytree(
             ROOT, source,
             ignore=shutil.ignore_patterns(
@@ -121,17 +137,15 @@ def package(args):
         )
         # Host Flutter artifacts must not leak a newer host ABI into the package.
         shutil.copytree(flutter, sdk, symlinks=True, ignore=shutil.ignore_patterns("cache"))
-        build_root = work / "sdk-build"
-        run([
-            "flatpak", "build-init", "--arch=x86_64", build_root, f"{APP_ID}.Build",
-            manifest["sdk"], manifest["runtime"], manifest["runtime-version"],
-        ])
         sdk_command = [
             "flatpak", "build", "--die-with-parent", "--share=network",
             f"--filesystem={work}", f"--build-dir={source}",
             f"--env=HOME={home}", f"--env=PUB_CACHE={pub_cache}",
-            f"--env=PATH={sdk / 'bin'}:/usr/bin:/bin", "--env=CI=true",
-            f"--env=CMAKE_TOOLCHAIN_FILE={source / 'packaging' / 'linux' / 'gcc-toolchain.cmake'}",
+            f"--env=PATH={sdk / 'bin'}:/usr/lib/sdk/llvm21/bin:/usr/bin:/bin", "--env=CI=true",
+            "--env=LD_LIBRARY_PATH=/usr/lib/sdk/llvm21/lib",
+            "--env=CC=/usr/lib/sdk/llvm21/bin/clang",
+            "--env=CXX=/usr/lib/sdk/llvm21/bin/clang++",
+            f"--env=CMAKE_TOOLCHAIN_FILE={source / 'packaging' / 'linux' / 'llvm-toolchain.cmake'}",
             "--env=CLIPTHAT_STAGE_TOOLS=0",
             "--env=FLUTTER_SUPPRESS_ANALYTICS=true", "--env=DART_SUPPRESS_ANALYTICS=true",
             build_root, sdk / "bin" / "flutter",

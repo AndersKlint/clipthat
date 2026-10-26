@@ -60,6 +60,17 @@ jobs:
           name: clipthat-windows-x64
           path: release-assets
 
+      - name: Name release binaries with the exact tag
+        shell: bash
+        working-directory: release-assets
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mv -- ClipThat-windows-x64.zip "ClipThat-windows-x64-${RELEASE_TAG}.zip"
+          mv -- ClipThat-windows-x64-setup.exe "ClipThat-windows-x64-setup-${RELEASE_TAG}.exe"
+          sha256sum -- "ClipThat-windows-x64-${RELEASE_TAG}.zip" "ClipThat-windows-x64-setup-${RELEASE_TAG}.exe" > SHA256SUMS-windows-x64
+
       - uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -69,6 +80,6 @@ jobs:
           prerelease: false
           fail_on_unmatched_files: true
           files: |
-            release-assets/ClipThat-windows-x64.zip
-            release-assets/ClipThat-windows-x64-setup.exe
+            release-assets/ClipThat-windows-x64-${{ github.ref_name }}.zip
+            release-assets/ClipThat-windows-x64-setup-${{ github.ref_name }}.exe
             release-assets/SHA256SUMS-windows-x64

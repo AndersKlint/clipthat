@@ -42,7 +42,7 @@ jobs:
             unshare --user --map-root-user true
           fi
 
-      - name: Install GNOME Platform and SDK 50
+      - name: Install GNOME Platform and SDK 50 with LLVM 21
         run: make flatpak-setup
 
       - name: Fetch stable Flutter SDK source
@@ -75,6 +75,16 @@ jobs:
           name: clipthat-linux-x64
           path: release-assets
 
+      - name: Name release binaries with the exact tag
+        shell: bash
+        working-directory: release-assets
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mv -- ClipThat-linux-x64.flatpak "ClipThat-linux-x64-${RELEASE_TAG}.flatpak"
+          sha256sum -- "ClipThat-linux-x64-${RELEASE_TAG}.flatpak" > SHA256SUMS-linux-x64
+
       - uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -84,5 +94,5 @@ jobs:
           prerelease: false
           fail_on_unmatched_files: true
           files: |
-            release-assets/ClipThat-linux-x64.flatpak
+            release-assets/ClipThat-linux-x64-${{ github.ref_name }}.flatpak
             release-assets/SHA256SUMS-linux-x64

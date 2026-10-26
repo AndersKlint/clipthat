@@ -26,7 +26,7 @@ The app passes bundled FFmpeg/Deno paths explicitly, ignores user yt-dlp configu
 
 ## Windows x64 setup
 
-1. Obtain `ClipThat-windows-x64-setup.exe` or `ClipThat-windows-x64.zip` and verify its entry in `SHA256SUMS-windows-x64`, which lists both binaries.
+1. Obtain the release's tagged installer or portable ZIP (for example, `ClipThat-windows-x64-setup-v0.5.4-beta.exe` or `ClipThat-windows-x64-v0.5.4-beta.zip`) and verify its entry in `SHA256SUMS-windows-x64`, which lists both binaries. Local packages and Actions artifacts use `ClipThat-windows-x64-setup.exe` and `ClipThat-windows-x64.zip`.
 2. Run Setup for a per-user installation to `%LOCALAPPDATA%\Programs\ClipThat!` without administrator privileges. It provides a Start Menu shortcut, optional desktop shortcut, uninstall support, and optional launch after installation. Alternatively, extract the **entire ZIP**, keeping `ClipThat/yt_section_downloader.exe`, Flutter/plugin DLLs, `data/`, `tools/`, notices, and accompanying metadata together. Launch the EXE.
 3. Install the [Microsoft Visual C++ x64 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist) if needed; packaging does not install it.
 4. Select a writable output directory.
@@ -37,12 +37,12 @@ The OS must support Flutter, Deno, and the other bundled components. Verify Wind
 
 ## Linux x64 Flatpak setup
 
-Obtain `ClipThat-linux-x64.flatpak` and verify `SHA256SUMS-linux-x64`. Install Flatpak for your distribution and enable Flathub. For per-user installation:
+Obtain the release's tagged Flatpak (for example, `ClipThat-linux-x64-v0.5.4-beta.flatpak`) and verify `SHA256SUMS-linux-x64`. Local packages and Actions artifacts use `ClipThat-linux-x64.flatpak`. Install Flatpak for your distribution and enable Flathub. For per-user installation, substituting your downloaded filename:
 
 ```sh
 flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 flatpak install --user flathub org.gnome.Platform//50
-flatpak install --user ./ClipThat-linux-x64.flatpak
+flatpak install --user ./ClipThat-linux-x64-v0.5.4-beta.flatpak
 flatpak run com.drjetski.clipthat
 ```
 
@@ -97,6 +97,10 @@ On Linux x64, direct `flutter run -d linux` and `flutter build linux` stage tool
 
 Flatpak distribution still requires the SDK-contained build for ABI compatibility. Its build sets `CLIPTHAT_STAGE_TOOLS=0` to skip development-cache staging; packaging selects fresh upstream binaries independently.
 
+`make flatpak-setup` explicitly installs `org.freedesktop.Sdk.Extension.llvm21//25.08` for x86_64 alongside GNOME Platform/SDK 50. The installed GNOME SDK 50 metadata declares the Freedesktop SDK extension point at `lib/sdk`, branch `25.08`; the extension is not on branch `50`. Packaging checks installation before staging, initializes the SDK with `flatpak build-init --writable-sdk --sdk-extension=org.freedesktop.Sdk.Extension.llvm21`, and verifies Clang/Clang++ inside that build environment before copying sources. `--sdk-extension` takes the extension ID; the SDK metadata selects its branch. Missing tools report setup/reinstallation guidance.
+
+`packaging/linux/llvm-toolchain.cmake` records `/usr/lib/sdk/llvm21/bin/clang` and `clang++` as forced CMake `FILEPATH` cache entries so Flutter's Linux build hooks find Clang beside the C++ compiler. SDK builds set CC/CXX to those paths, prepend the LLVM bin directory to the SDK tool PATH, and set `LD_LIBRARY_PATH=/usr/lib/sdk/llvm21/lib`. Use no host compiler fallback or Flutter patches. The writable SDK and compiler extension are build-only and are not exported in the application.
+
 See [development commands](README.md#development). There is one normal prebuilt-tool policy for running and packaging, without a separate Flatpak development mode.
 
 ### Flatpak packaging storage
@@ -107,7 +111,7 @@ OSTree reserve policy can block export despite free disk space. An error such as
 
 ### GitHub workflow requirements
 
-Both native workflows retain the binary packages and checksums as **Actions artifacts**. Manual **`workflow_dispatch`** runs on the desired revision require no tag and do not publish a GitHub Release. Pushing a **`v*` tag** triggers both workflows; each successful platform publishes to the same release for that tag. No tag-to-`pubspec.yaml` version matching is required. Windows assets are `ClipThat-windows-x64.zip`, `ClipThat-windows-x64-setup.exe`, and `SHA256SUMS-windows-x64`; Linux assets are `ClipThat-linux-x64.flatpak` and `SHA256SUMS-linux-x64`. The Windows workflow ensures Inno Setup is available using Chocolatey. No tool source archives are uploaded.
+Both native workflows retain the binary packages and checksums as **Actions artifacts**. Manual **`workflow_dispatch`** runs on the desired revision require no tag and do not publish a GitHub Release. Pushing a **`v*` tag** triggers both workflows; each successful platform publishes to the same release for that tag. No tag-to-`pubspec.yaml` version matching is required. Local packaging and Actions artifacts retain `ClipThat-windows-x64.zip`, `ClipThat-windows-x64-setup.exe`, and `ClipThat-linux-x64.flatpak`. Only the publish jobs rename binaries with the exact tag before the extension: tag `v0.5.4-beta` produces `ClipThat-windows-x64-v0.5.4-beta.zip`, `ClipThat-windows-x64-setup-v0.5.4-beta.exe`, and `ClipThat-linux-x64-v0.5.4-beta.flatpak`. Checksum filenames remain `SHA256SUMS-windows-x64` and `SHA256SUMS-linux-x64`; publish jobs regenerate them using `sha256sum` to reference the renamed binaries. The tag enters Bash through the `RELEASE_TAG` environment variable, never direct interpolation into shell source. The Windows workflow ensures Inno Setup is available using Chocolatey. No tool source archives are uploaded.
 
 Separate publish jobs use `softprops/action-gh-release@v2`, job-scoped `contents: write`, and shared concurrency to serialize release updates. Releases are nondraft and nonprerelease (`draft: false`, `prerelease: false`), without automatic version parsing or generated notes. Either platform can publish independently; a failed platform can leave partial release assets until its workflow is retried.
 

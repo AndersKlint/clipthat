@@ -44,4 +44,4 @@ windows-zip windows-installer:
 
 flatpak-setup:
 	flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-	flatpak install --user --noninteractive -y --arch=x86_64 flathub org.gnome.Platform//50 org.gnome.Sdk//50
+	flatpak install --user --noninteractive -y --arch=x86_64 flathub org.gnome.Platform//50 org.gnome.Sdk//50 org.freedesktop.Sdk.Extension.llvm21//25.08
