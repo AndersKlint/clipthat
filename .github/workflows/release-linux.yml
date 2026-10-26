@@ -45,11 +45,8 @@ jobs:
       - name: Install GNOME Platform and SDK 50 with LLVM 21
         run: make flatpak-setup
 
-      - name: Fetch stable Flutter SDK source
-        run: git clone --depth 1 --branch stable https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
-
       - name: Build Flatpak inside GNOME SDK
-        run: make flatpak-installer FLUTTER_SDK="$RUNNER_TEMP/flutter"
+        run: make flatpak-installer
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

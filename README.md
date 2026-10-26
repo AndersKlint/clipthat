@@ -36,17 +36,19 @@ From the repository root:
 | `make build` | Build a native Flutter release; stages tools on Linux, Flutter build only on Windows. |
 | `make installer` | Package Linux Flatpak or both Windows installer EXE and portable ZIP. |
 
-For Linux packaging, install the host dependencies (Ubuntu/Debian), then set up the Flatpak SDK and build:
+Linux Flatpak packaging needs GNU Make, Python 3.x, Git, and Flatpak tooling, but no host Flutter SDK or `FLUTTER_SDK`. Install the host dependencies (Ubuntu/Debian), then explicitly set up the Flatpak prerequisites and build:
 
 ```sh
-sudo apt install flatpak flatpak-builder librsvg2-common
+sudo apt install flatpak flatpak-builder librsvg2-common bubblewrap curl git unzip xz-utils zip
 make flatpak-setup
 make flatpak-installer
 ```
 
-Linux distribution builds must run inside **GNOME SDK 50** for Flatpak runtime ABI compatibility. Packaging sets `CLIPTHAT_STAGE_TOOLS=0` for that build and bundles freshly selected upstream tools instead of the development cache. Packages go to `build/flatpak` on Linux and `dist/windows-x64` on Windows. Packaging downloads upstream tools and requires network access. Installed apps never download tools or fall back to PATH.
+`flatpak-builder` fetches Flutter's **stable** Git branch, bootstraps Flutter, resolves pub dependencies, and compiles/installs the app inside **GNOME SDK 50** for runtime ABI compatibility. Make stages freshly selected upstream tools through `scripts/bundle_tools.py`, validates them in the actual **GNOME Platform 50** runtime, then exports the Flatpak and checksum. Network access is required for Flutter sources/bootstrap, pub dependencies, and upstream tools. Host Flutter remains required for native development commands. Installed apps never download tools or fall back to PATH.
 
-`make flatpak-setup` explicitly installs `org.freedesktop.Sdk.Extension.llvm21//25.08` alongside GNOME Platform/SDK 50. GNOME SDK 50 uses the Freedesktop `25.08` extension branch. Packaging requires this extension, initializes a writable SDK with `--sdk-extension=org.freedesktop.Sdk.Extension.llvm21` (the SDK metadata selects the branch), and builds with its Clang/Clang++ under `/usr/lib/sdk/llvm21/bin`. LLVM is a build-only dependency; no host compiler fallback is used. Missing compilers fail preflight with setup/reinstallation guidance.
+`make flatpak-setup` explicitly installs GNOME Platform/SDK 50 and `org.freedesktop.Sdk.Extension.llvm21//25.08`. The manifest uses this build-only LLVM extension with an immutable SDK; no host compiler or host-built Flutter bundle is used.
+
+Packages go to `build/flatpak` on Linux and `dist/windows-x64` on Windows; override with `OUTPUT_DIR`. Linux output must be inside `build/` or outside the source tree. Existing Flatpak/checksum outputs are never overwritten: move them or choose a fresh output directory before rebuilding. Temporary staging is cleaned on exit; the output's `repo/` is retained.
 
 See [tool packaging](packaging/tools/README.md) and [Windows packaging](packaging/windows/README.md) for details.
 

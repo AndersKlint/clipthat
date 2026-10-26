@@ -3,6 +3,7 @@
   "runtime": "org.gnome.Platform",
   "runtime-version": "50",
   "sdk": "org.gnome.Sdk",
+  "sdk-extensions": ["org.freedesktop.Sdk.Extension.llvm21"],
   "command": "yt_section_downloader",
   "branch": "stable",
   "separate-locales": false,
@@ -20,23 +21,45 @@
       "buildsystem": "simple",
       "build-options": {
         "strip": false,
-        "no-debuginfo": true
+        "no-debuginfo": true,
+        "prepend-path": "/usr/lib/sdk/llvm21/bin",
+        "build-args": ["--share=network"],
+        "env": {
+          "CC": "/usr/lib/sdk/llvm21/bin/clang",
+          "CXX": "/usr/lib/sdk/llvm21/bin/clang++",
+          "LD_LIBRARY_PATH": "/usr/lib/sdk/llvm21/lib",
+          "CLIPTHAT_STAGE_TOOLS": "0",
+          "FLUTTER_SUPPRESS_ANALYTICS": "true",
+          "DART_SUPPRESS_ANALYTICS": "true",
+          "CI": "true",
+          "PUB_CACHE": "/run/build/clipthat/.pub-cache"
+        }
       },
       "build-commands": [
+        "/usr/lib/sdk/llvm21/bin/clang --version && /usr/lib/sdk/llvm21/bin/clang++ --version",
+        "flutter/bin/flutter config --enable-linux-desktop --no-analytics",
+        "flutter/bin/flutter precache --linux",
+        "flutter/bin/flutter pub get --enforce-lockfile",
+        "CMAKE_TOOLCHAIN_FILE=$PWD/packaging/linux/llvm-toolchain.cmake flutter/bin/flutter build linux --release --no-pub --target-platform linux-x64",
         "mkdir -p /app/clipthat /app/bin",
-        "cp -a bundle/. /app/clipthat/",
+        "cp -a build/linux/x64/release/bundle/. /app/clipthat/",
+        "cp -a prepared/tools /app/clipthat/ && mkdir -p /app/clipthat/licenses && cp -a prepared/licenses/tools /app/clipthat/licenses/",
+        "install -Dm644 LICENSE /app/clipthat/licenses/ClipThat-LICENSE.txt",
+        "install -Dm644 THIRD_PARTY_NOTICES.md /app/clipthat/licenses/THIRD_PARTY_NOTICES.md",
         "chmod 755 /app/clipthat/yt_section_downloader /app/clipthat/tools/yt-dlp /app/clipthat/tools/ffmpeg /app/clipthat/tools/ffprobe /app/clipthat/tools/deno",
-        "install -Dm755 yt_section_downloader /app/bin/yt_section_downloader",
-        "install -Dm644 com.drjetski.clipthat.desktop /app/share/applications/com.drjetski.clipthat.desktop",
-        "install -Dm644 com.drjetski.clipthat.metainfo.xml /app/share/metainfo/com.drjetski.clipthat.metainfo.xml",
-        "install -Dm644 com.drjetski.clipthat.svg /app/share/icons/hicolor/scalable/apps/com.drjetski.clipthat.svg"
+        "install -Dm755 packaging/linux/yt_section_downloader /app/bin/yt_section_downloader",
+        "install -Dm644 packaging/linux/com.drjetski.clipthat.desktop /app/share/applications/com.drjetski.clipthat.desktop",
+        "install -Dm644 packaging/linux/com.drjetski.clipthat.metainfo.xml /app/share/metainfo/com.drjetski.clipthat.metainfo.xml",
+        "install -Dm644 packaging/linux/com.drjetski.clipthat.svg /app/share/icons/hicolor/scalable/apps/com.drjetski.clipthat.svg"
       ],
       "sources": [
-        {"type": "dir", "path": "bundle", "dest": "bundle"},
-        {"type": "file", "path": "yt_section_downloader"},
-        {"type": "file", "path": "com.drjetski.clipthat.desktop"},
-        {"type": "file", "path": "com.drjetski.clipthat.metainfo.xml"},
-        {"type": "file", "path": "com.drjetski.clipthat.svg"}
+        {
+          "type": "dir",
+          "path": "source",
+          "skip": [".git", ".dart_tool", "build", "dist", ".flatpak-builder", ".pub-cache", ".pub", ".cache", ".flutter-plugins", ".flutter-plugins-dependencies", "linux/flutter/ephemeral", "release-sources", "__pycache__"]
+        },
+        {"type": "git", "url": "https://github.com/flutter/flutter.git", "branch": "stable", "dest": "flutter"},
+        {"type": "dir", "path": "prepared", "dest": "prepared"}
       ]
     }
   ]
