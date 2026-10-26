@@ -123,37 +123,59 @@ class ClipPipeline {
         );
       }
       final subtitles = <({String path, String language, String title})>[];
-      if (request.includeSubtitles) {
-        for (final automatic in [
-          false,
-          if (request.includeAutomaticTranslations) true,
-        ]) {
+      if (request.includeSubtitles && request.subtitleTracks.isEmpty) {
+        onWarning('No subtitle tracks selected or available; '
+            'the clip will have no subtitles.');
+      }
+      if (request.includeSubtitles && request.subtitleTracks.isNotEmpty) {
+        var rateLimited = false;
+        for (final automatic in [false, true]) {
+          final selected = request.subtitleTracks
+              .where((track) => track.isAutomatic == automatic)
+              .toList();
+          if (selected.isEmpty) continue;
           final kind = automatic ? 'automatic' : 'manual';
           try {
-            final download =
-                await _tools.run(_bundledTools.executable('yt-dlp'), [
-              ..._bundledTools.ytDlpArguments,
-              '--no-playlist',
-              '--skip-download',
-              '--socket-timeout',
-              '30',
-              '--retries',
-              '3',
-              '--ignore-errors',
-              automatic ? '--no-write-subs' : '--write-subs',
-              automatic ? '--write-auto-subs' : '--no-write-auto-subs',
-              '--sub-langs',
-              'all,-live_chat',
-              '--sub-format',
-              'vtt',
-              '--output',
-              p.join(temporary.path.replaceAll('%', '%%'),
-                  'captions-$kind.%(ext)s'),
-              '--',
-              request.url,
-            ]);
+            final download = await _tools.run(
+                _bundledTools.executable('yt-dlp'),
+                [
+                  ..._bundledTools.ytDlpArguments,
+                  '--no-playlist',
+                  '--skip-download',
+                  '--socket-timeout',
+                  '30',
+                  '--retries',
+                  '0',
+                  '--sleep-subtitles',
+                  '5',
+                  '--sleep-requests',
+                  '5',
+                  automatic ? '--no-write-subs' : '--write-subs',
+                  automatic ? '--write-auto-subs' : '--no-write-auto-subs',
+                  '--sub-langs',
+                  selected
+                      .map((track) => '^${RegExp.escape(track.languageCode)}\$')
+                      .join(','),
+                  '--sub-format',
+                  'vtt',
+                  '--output',
+                  p.join(temporary.path.replaceAll('%', '%%'),
+                      'captions-$kind.%(ext)s'),
+                  '--',
+                  request.url,
+                ],
+                timeout: const Duration(minutes: 15));
             _ensureRunning();
             final detail = download.stderr.trim();
+            if (RegExp(
+                    r'(?:HTTP(?: Error)?\s*429|429\s*[: -]|Too Many Requests)',
+                    caseSensitive: false)
+                .hasMatch(detail)) {
+              rateLimited = true;
+              onWarning('YouTube limited subtitle requests (HTTP 429); '
+                  'continuing with tracks already downloaded.');
+              break;
+            }
             if (download.exitCode != 0 ||
                 RegExp(r'\b(?:WARNING|ERROR):').hasMatch(detail)) {
               onWarning('Some $kind subtitles could not be downloaded; '
@@ -179,6 +201,9 @@ class ClipPipeline {
           final prefix = automatic ? 'captions-automatic.' : 'captions-manual.';
           if (!name.startsWith(prefix)) continue;
           final variant = name.substring(prefix.length, name.length - 4);
+          final selected = request.subtitleTracks.where((track) =>
+              track.isAutomatic == automatic && track.languageCode == variant);
+          if (selected.isEmpty) continue;
           try {
             final probe = await _tools.run(
               _bundledTools.executable('ffprobe'),
@@ -202,14 +227,14 @@ class ClipPipeline {
             subtitles.add((
               path: path,
               language: variant.replaceFirst(RegExp(r'-orig$'), ''),
-              title: '$variant (${automatic ? 'automatic' : 'manual'})',
+              title: selected.first.label,
             ));
           } catch (error) {
             _ensureRunning();
             onWarning('Skipping unusable subtitle track $variant.\n$error');
           }
         }
-        if (subtitles.isEmpty) {
+        if (subtitles.isEmpty && !rateLimited) {
           onWarning(
               'Subtitles are unavailable; the clip will have no subtitles.');
         }

@@ -4,7 +4,6 @@ import 'package:path/path.dart' as p;
 
 class BundledTools {
   static const names = ['yt-dlp', 'ffmpeg', 'ffprobe', 'deno'];
-  static const minimumDenoVersion = '2.3.0';
 
   final String directory = p.join(
     p.dirname(Platform.resolvedExecutable),

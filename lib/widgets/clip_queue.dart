@@ -53,9 +53,7 @@ class ClipQueue extends StatelessWidget {
                 key: ValueKey(job.id),
                 job: job,
                 onRemove: () => controller.remove(job),
-                onRetry: controller.toolsReady && !controller.checkingTools
-                    ? () => onRetry(job)
-                    : null,
+                onRetry: () => onRetry(job),
               ),
               if (job != jobs.last) const SizedBox(height: 8),
             ],
@@ -169,9 +167,9 @@ class _JobCard extends StatelessWidget {
             children: [
               Tooltip(
                 message: job.request.includeSubtitles
-                    ? job.request.includeAutomaticTranslations
-                        ? 'This clip requests all available manual tracks, generated captions, and automatic translations for embedding in the MKV. Missing tracks warn without failing the clip.'
-                        : 'This clip requests all available manual subtitle tracks only for embedding in the MKV. Missing manual tracks warn without failing the clip.'
+                    ? job.request.subtitleTracks.isEmpty
+                        ? 'No subtitle tracks requested; no captions were available.'
+                        : 'Subtitle tracks: ${job.request.subtitleTracks.map((track) => track.label).join(', ')}. Missing tracks warn without failing the clip.'
                     : 'Subtitles not requested',
                 child: Text(
                   '${job.statusLabel}${job.isActive && progress != null ? ' · ${(progress * 100).round()}%' : ''}',

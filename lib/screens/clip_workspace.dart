@@ -8,7 +8,7 @@ import '../controllers/clip_controller.dart';
 import '../models/clip_job.dart';
 import '../models/clip_request.dart';
 import '../widgets/clip_queue.dart';
-import '../widgets/tool_status_banner.dart';
+import '../widgets/subtitle_picker.dart';
 import '../widgets/workspace_panel.dart';
 
 class ClipWorkspace extends StatefulWidget {
@@ -30,16 +30,20 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
   final _output = TextEditingController();
   final Map<TextEditingController, String> _lastInput = {};
   bool _includeSubtitles = true;
-  bool _includeAutomaticTranslations = false;
   bool _pickingDirectory = false;
+  bool _submitting = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
     _output.text = _controller.outputDirectory;
+    _url.addListener(_subtitleSourceChanged);
     unawaited(_restoreOutputDirectory());
-    unawaited(_controller.checkTools());
+  }
+
+  void _subtitleSourceChanged() {
+    _controller.setSubtitleSource(_url.text);
   }
 
   Future<void> _restoreOutputDirectory() async {
@@ -105,8 +109,7 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
         end: _end.text,
         outputDirectory: _output.text,
         includeSubtitles: _includeSubtitles,
-        includeAutomaticTranslations:
-            _includeSubtitles && _includeAutomaticTranslations,
+        subtitleTracks: _controller.selectedSubtitleTracks,
       );
 
   ClipRequest? get _preview {
@@ -117,8 +120,30 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
     }
   }
 
-  void _createClip() {
+  Future<void> _createClip() async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
     try {
+      final source = YouTubeLink.parse(_url.text).videoId;
+      _parse();
+      if (_includeSubtitles) {
+        await _controller.loadSubtitles(_url.text);
+        if (!mounted) return;
+        if (YouTubeLink.parse(_url.text).videoId != source) {
+          throw const FormatException(
+              'The source changed. Review subtitle languages and submit again.');
+        }
+        if (_includeSubtitles && !_controller.subtitlesLoaded) {
+          throw FormatException(_controller.subtitleError ??
+              'Load subtitle languages or turn Download subs off.');
+        }
+        if (_includeSubtitles &&
+            _controller.subtitleTracks.isNotEmpty &&
+            _controller.selectedSubtitleTracks.isEmpty) {
+          throw const FormatException(
+              'Select subtitle languages or turn Download subs off.');
+        }
+      }
       final request = _parse();
       _controller.add(request);
       setState(() => _error = null);
@@ -126,6 +151,8 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
       setState(() => _error = error.message);
     } on StateError catch (error) {
       setState(() => _error = error.message);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -227,7 +254,6 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
                                       .onSurfaceVariant),
                         ),
                         const SizedBox(height: 12),
-                        ToolStatusBanner(controller: _controller),
                       ],
                     ),
                   ),
@@ -319,11 +345,7 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
             onChanged: _outputChanged,
             autocorrect: false,
             textInputAction: TextInputAction.done,
-            onSubmitted: (_) {
-              if (_controller.toolsReady && !_controller.checkingTools) {
-                _createClip();
-              }
-            },
+            onSubmitted: (_) => _createClip(),
             decoration: InputDecoration(
               hintText: 'Choose an output folder',
               labelText: 'Output folder',
@@ -341,36 +363,48 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
           const SizedBox(height: 12),
           Material(
             color: colors.surface,
-            child: Column(children: [
-              Tooltip(
-                message:
-                    'Download and embed all available manual subtitle tracks in the MKV. Enable Include automatic translations to also request generated captions and automatic translations. Missing tracks warn without failing the clip. Settings are saved per queued clip.',
-                child: SwitchListTile(
-                  title: const Text('Download subs'),
-                  value: _includeSubtitles,
-                  onChanged: (value) => setState(() {
-                    _includeSubtitles = value;
-                    if (!value) _includeAutomaticTranslations = false;
-                  }),
-                  contentPadding: EdgeInsets.zero,
-                ),
+            child: Tooltip(
+              message:
+                  'Embed the selected subtitle languages in the MKV. Missing tracks warn without failing the clip. Settings are saved per queued clip.',
+              child: SwitchListTile(
+                title: const Text('Download subs'),
+                value: _includeSubtitles,
+                onChanged: (value) =>
+                    setState(() => _includeSubtitles = value),
+                contentPadding: EdgeInsets.zero,
               ),
-              Tooltip(
-                message:
-                    'Also download generated captions and automatic translations in all available languages. This can take much longer. Requires Download subs; turning subtitles off clears this selection.',
-                child: SwitchListTile(
-                  title: const Text('Include automatic translations'),
-                  value: _includeAutomaticTranslations,
-                  onChanged: _includeSubtitles
-                      ? (value) =>
-                          setState(() => _includeAutomaticTranslations = value)
-                      : null,
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                ),
-              ),
-            ]),
+            ),
           ),
+          Material(
+            color: colors.surface,
+            child: Tooltip(
+              message:
+                  'Include original auto generated and auto translated subtitles. Fetching these subtitles, especially in uncommon languages, can often fail.',
+              child: SwitchListTile(
+                title: const Text('Include auto generated subs (experimental)'),
+                value: _controller.includeAutoGeneratedSubtitles,
+                onChanged: _includeSubtitles
+                    ? (value) {
+                        _controller.setIncludeAutoGeneratedSubtitles(value);
+                        setState(() => _error = null);
+                      }
+                    : null,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+          if (_includeSubtitles)
+            SubtitlePicker(
+              tracks: _controller.subtitleTracks,
+              selected: _controller.selectedSubtitleTracks,
+              loading: _controller.subtitlesLoading,
+              loaded: _controller.subtitlesLoaded,
+              error: _controller.subtitleError,
+              onLoad: () => unawaited(_controller.loadSubtitles(_url.text)),
+              onRetry: () =>
+                  unawaited(_controller.loadSubtitles(_url.text, retry: true)),
+              onChanged: _controller.selectSubtitleTracks,
+            ),
           if (_controller.outputPreferenceError case final message?) ...[
             const SizedBox(height: 12),
             Semantics(
@@ -407,9 +441,7 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
             child: SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: _controller.toolsReady && !_controller.checkingTools
-                    ? _createClip
-                    : null,
+                onPressed: _submitting ? null : _createClip,
                 child: Text(
                     _controller.isProcessing ? 'Add to queue' : 'Create clip'),
               ),
