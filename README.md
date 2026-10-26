@@ -4,6 +4,10 @@ By **Dr. Jetski Studios** · [drjetski.com](https://drjetski.com)
 
 ClipThat! is a desktop app for grabbing precise **YouTube clips** on **Windows x64 and Linux x64**. Paste a link, choose a time range and output folder, and queue your clips. Clips are saved as H.264/AAC MKV with your selected VTT subtitle tracks when enabled.
 
+**[Download ClipThat!](https://drjetski.com/projects/clipthat)**
+
+![ClipThat! desktop app for selecting and queuing YouTube clips](screenshot.png)
+
 The session-only **Desired quality** dropdown defaults to **Best available**, with caps of **2160p (4K), 1440p, 1080p, 720p, 480p, and 360p**. Best selects the highest available resolution; a cap selects the highest available resolution at or below it. Each queued clip retains its quality for retries; edits affect only future jobs. Output is precisely encoded at the source resolution with lossy H.264/AAC encoding, not lossless or original-quality copying. Higher resolutions need more download/cache space and take longer to encode.
 
 Full source video/audio is reused across jobs and restarts from a disposable application cache keyed by YouTube video ID and requested quality. Subtitles remain per-job requests for the exact queued eligible tracks. Sources expire 24 hours after last use; cleanup runs at startup and hourly while idle, never removing an active source. No cleanup runs while the app is closed; the next launch prunes expired sources. **Clear cache** in the theme/settings dropdown is disabled during processing or maintenance and reports success or errors without deleting output clips. Failed/partial sources are removed, invalid cached sources are downloaded again, and completed sources remain reusable even if encoding or output fails. An unavailable or unusable cache warns and falls back to a job-temp download; a cache-store failure warns and continues with the temporary media. New sources download into per-job system temp, then successful validated sources are copied to cache: allow space for both full copies until the job finishes, plus encoded intermediates and output. Per-job temporary files are cleaned on success, failure, or cancellation.
@@ -20,7 +24,7 @@ The last output directory is the only persisted preference, whether selected wit
 
 ## Installation
 
-Download the latest package from [GitHub Releases](https://github.com/AndersKlint/yt-clip-extractor/releases).
+Download the latest package from the [ClipThat! website](https://drjetski.com/projects/clipthat) or [GitHub Releases](https://github.com/AndersKlint/yt-clip-extractor/releases).
 
 - **Windows x64:** run `ClipThat-windows-x64-setup.exe`, or extract the complete `ClipThat-windows-x64.zip` and launch `ClipThat/yt_section_downloader.exe`. Both require the [Microsoft Visual C++ x64 runtime](https://aka.ms/vs/17/release/vc_redist.x64.exe), installed separately.
 - **Linux x64:** install the downloaded Flatpak, then launch it:
