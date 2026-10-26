@@ -9,6 +9,7 @@ import '../models/clip_job.dart';
 import '../models/clip_request.dart';
 import '../models/video_quality.dart';
 import '../widgets/clip_queue.dart';
+import '../widgets/output_folder_field.dart';
 import '../widgets/subtitle_picker.dart';
 import '../widgets/workspace_panel.dart';
 
@@ -370,25 +371,12 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
             ),
           ],
           const SizedBox(height: 20),
-          TextField(
+          OutputFolderField(
             controller: _output,
             onChanged: _outputChanged,
-            autocorrect: false,
-            textInputAction: TextInputAction.done,
             onSubmitted: (_) => _createClip(),
-            decoration: InputDecoration(
-              hintText: 'Choose an output folder',
-              labelText: 'Output folder',
-              suffixIcon: IconButton(
-                tooltip: 'Choose output folder',
-                onPressed: _pickingDirectory ? null : _chooseDirectory,
-                icon: _pickingDirectory
-                    ? const SizedBox.square(
-                        dimension: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.folder_open_rounded, size: 21),
-              ),
-            ),
+            onBrowse: _chooseDirectory,
+            pickingDirectory: _pickingDirectory,
           ),
           const SizedBox(height: 20),
           Tooltip(

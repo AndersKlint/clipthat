@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../controllers/clip_controller.dart';
 import '../models/clip_job.dart';
 import '../models/clip_request.dart';
+import 'portal_path_presentation.dart';
 import 'workspace_panel.dart';
 
 class ClipQueue extends StatelessWidget {
@@ -207,8 +208,11 @@ class _JobCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: SelectableText(job.outputPath!,
-                      style: theme.textTheme.bodySmall),
+                  child: Tooltip(
+                    message: job.outputPath!,
+                    child: SelectableText(outputFileLabel(job.outputPath!),
+                        style: theme.textTheme.bodySmall),
+                  ),
                 ),
                 IconButton(
                   tooltip: 'Copy output path',
