@@ -168,6 +168,60 @@ class ClipController extends ChangeNotifier {
   bool _processing = false;
   bool _disposed = false;
   int _nextId = 0;
+  Timer? _cacheTimer;
+  Future<void>? _cacheMaintenance;
+  bool _cacheInitialized = false;
+  String? _cacheError;
+
+  bool get cacheBusy => _cacheMaintenance != null;
+  bool get canClearCache => !_disposed && !_processing && !cacheBusy;
+  String? get cacheError => _cacheError;
+
+  Future<void> initializeCache() {
+    if (_disposed || _cacheInitialized) {
+      return _cacheMaintenance ?? Future<void>.value();
+    }
+    _cacheInitialized = true;
+    _cacheTimer = Timer.periodic(const Duration(hours: 1), (_) {
+      if (canClearCache) unawaited(_maintainCache(clear: false));
+    });
+    return _maintainCache(clear: false);
+  }
+
+  Future<bool> clearCache() async {
+    if (!canClearCache) return false;
+    await _maintainCache(clear: true);
+    return !_disposed && _cacheError == null;
+  }
+
+  Future<void> _maintainCache({required bool clear}) {
+    if (_disposed) return Future<void>.value();
+    if (_cacheMaintenance case final pending?) return pending;
+    final completion = Completer<void>();
+    _cacheMaintenance = completion.future;
+    _notify();
+    unawaited(() async {
+      try {
+        if (clear) {
+          await _pipeline.clearCache();
+        } else {
+          await _pipeline.pruneCache();
+        }
+        if (!_disposed) _cacheError = null;
+      } catch (error) {
+        if (!_disposed) {
+          _cacheError =
+              'Could not ${clear ? 'clear' : 'clean up'} temporary sources. Check temporary-folder permissions and free disk space, then retry Clear cache in Settings. ${_errorText(error)}';
+        }
+      } finally {
+        _cacheMaintenance = null;
+        completion.complete();
+        _notify();
+        if (!_disposed && !_processing) unawaited(_drain());
+      }
+    }());
+    return completion.future;
+  }
 
   List<ClipJob> get jobs => List.unmodifiable(_jobs);
   bool get isProcessing => _processing;
@@ -179,6 +233,7 @@ class ClipController extends ChangeNotifier {
   }
 
   void add(ClipRequest request) {
+    if (_disposed) return;
     _jobs.add(ClipJob(id: '${++_nextId}', request: request));
     _notify();
     unawaited(_drain());
@@ -198,6 +253,7 @@ class ClipController extends ChangeNotifier {
   }
 
   void retry(ClipJob job) {
+    if (_disposed) return;
     if (!_jobs.contains(job) || job.status != ClipJobStatus.failed) return;
     job.status = ClipJobStatus.queued;
     job.progress = null;
@@ -209,13 +265,22 @@ class ClipController extends ChangeNotifier {
   }
 
   Future<void> _drain() async {
-    if (_disposed || _processing) return;
+    if (_disposed || _processing || cacheBusy) return;
+    if (!_cacheInitialized) {
+      unawaited(initializeCache());
+      return;
+    }
     _processing = true;
     try {
       while (!_disposed) {
         final queued = _jobs.where((job) => job.status == ClipJobStatus.queued);
         if (queued.isEmpty) break;
-        final job = queued.first;
+        await _maintainCache(clear: false);
+        if (_disposed) return;
+        final remaining =
+            _jobs.where((job) => job.status == ClipJobStatus.queued);
+        if (remaining.isEmpty) break;
+        final job = remaining.first;
         job.status = ClipJobStatus.downloading;
         _notify();
         try {
@@ -264,6 +329,7 @@ class ClipController extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _cacheTimer?.cancel();
     _subtitleCatalog.dispose();
     _pipeline.dispose();
     super.dispose();

@@ -176,6 +176,11 @@ class _JobCard extends StatelessWidget {
                   style: theme.textTheme.labelMedium!.copyWith(color: color),
                 ),
               ),
+              Text(
+                job.request.quality.label,
+                style: theme.textTheme.labelMedium!
+                    .copyWith(color: colors.onSurfaceVariant),
+              ),
               if (failed)
                 TextButton(onPressed: onRetry, child: const Text('Retry')),
             ],

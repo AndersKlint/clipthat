@@ -1,6 +1,7 @@
 import 'package:path/path.dart' as p;
 
 import 'subtitle_track.dart';
+import 'video_quality.dart';
 
 class YouTubeLink {
   final String videoId;
@@ -31,6 +32,7 @@ class ClipRequest {
   final int endSeconds;
   final bool includeSubtitles;
   final List<SubtitleTrack> subtitleTracks;
+  final VideoQuality quality;
 
   const ClipRequest._({
     required this.videoId,
@@ -40,6 +42,7 @@ class ClipRequest {
     required this.endSeconds,
     required this.includeSubtitles,
     required this.subtitleTracks,
+    required this.quality,
   });
 
   factory ClipRequest.parse({
@@ -49,6 +52,7 @@ class ClipRequest {
     required String outputDirectory,
     required bool includeSubtitles,
     required List<SubtitleTrack> subtitleTracks,
+    required VideoQuality quality,
   }) {
     final source = YouTubeLink.parse(url);
     final startSeconds = start.trim().isEmpty
@@ -72,6 +76,7 @@ class ClipRequest {
       startSeconds: startSeconds,
       endSeconds: endSeconds,
       includeSubtitles: includeSubtitles,
+      quality: quality,
       subtitleTracks: List.unmodifiable(
           includeSubtitles ? subtitleTracks.toSet() : <SubtitleTrack>[]),
     );

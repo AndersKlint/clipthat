@@ -6,14 +6,20 @@ import 'package:path/path.dart' as p;
 
 import '../models/clip_request.dart';
 import 'bundled_tools.dart';
+import 'source_cache.dart';
 import 'tool_process.dart';
 
 class ClipPipeline {
   final BundledTools _bundledTools;
   final ToolProcess _tools = ToolProcess();
+  final SourceCache _cache = SourceCache();
   bool _disposed = false;
 
   ClipPipeline(this._bundledTools);
+
+  Future<void> pruneCache() => _cache.prune();
+
+  Future<void> clearCache() => _cache.clear();
 
   Future<String> run(
     ClipRequest request, {
@@ -42,79 +48,86 @@ class ClipPipeline {
       temporary = await Directory.systemTemp.createTemp('yt-clip-');
       _ensureRunning();
       onProgress(false, null);
-      final download = await _tools.run(_bundledTools.executable('yt-dlp'), [
-        ..._bundledTools.ytDlpArguments,
-        '--no-playlist',
-        '--no-overwrites',
-        '--fixup',
-        'never',
-        '--socket-timeout',
-        '30',
-        '--retries',
-        '3',
-        '--fragment-retries',
-        '3',
-        '--match-filter',
-        '!is_live',
-        '--newline',
-        '--progress',
-        '--progress-template',
-        'download:clip-progress:%(progress._percent_str)s',
-        '--format',
-        'bv[height<=1080]/b[height<=1080],ba/b[height<=1080]',
-        '--output',
-        p.join(temporary.path.replaceAll('%', '%%'),
-            'source.%(format_id)s.%(ext)s'),
-        '--',
-        request.url,
-      ], onStdout: (line) {
-        if (_disposed || !line.startsWith('clip-progress:')) return;
-        final percent = double.tryParse(
-          line.substring('clip-progress:'.length).replaceAll('%', '').trim(),
-        );
-        if (percent != null && percent.isFinite) {
-          onProgress(false, (percent / 100).clamp(0.0, 1.0));
+      ({String video, String audio, double? duration})? source;
+      Directory? cached;
+      try {
+        cached = await _cache.find(request.videoId, request.quality.name);
+        _ensureRunning();
+        if (cached != null) {
+          source = await _probeSource(cached);
+          _ensureRunning();
+          await _cache.touch(cached);
         }
-      });
-      download.requireSuccess('Download failed');
+      } catch (error) {
+        _ensureRunning();
+        source = null;
+        onWarning(
+            'Source cache unavailable or unusable; downloading again. $error');
+        if (cached != null) {
+          try {
+            await _cache.invalidate(cached);
+          } catch (error) {
+            onWarning('Could not remove unusable cached source. $error');
+          }
+        }
+      }
       _ensureRunning();
-      final files =
-          await temporary.list().where((entry) => entry is File).toList();
-      String? video;
-      String? audio;
-      double? duration;
-      for (final file in files) {
-        if (!p.basename(file.path).startsWith('source.')) continue;
-        final probe = await _tools.run(
-            _bundledTools.executable('ffprobe'),
-            [
-              '-v',
-              'error',
-              '-show_entries',
-              'stream=codec_type:format=duration',
-              '-of',
-              'json',
-              file.path,
-            ],
-            timeout: const Duration(seconds: 30));
-        probe.requireSuccess('Unable to inspect downloaded media');
-        final data = jsonDecode(probe.stdout) as Map<String, dynamic>;
-        final streams = (data['streams'] as List<dynamic>?) ?? [];
-        if (streams.any((stream) => stream['codec_type'] == 'video')) {
-          video = file.path;
-          duration = double.tryParse('${data['format']?['duration']}');
-        }
-        if (streams.any((stream) => stream['codec_type'] == 'audio')) {
-          audio = file.path;
+      if (source == null) {
+        final height = request.quality.maxHeight;
+        final cap = height == null ? '' : '[height<=$height]';
+        final download = await _tools.run(_bundledTools.executable('yt-dlp'), [
+          ..._bundledTools.ytDlpArguments,
+          '--no-playlist',
+          '--no-overwrites',
+          '--fixup',
+          'never',
+          '--socket-timeout',
+          '30',
+          '--retries',
+          '3',
+          '--fragment-retries',
+          '3',
+          '--match-filter',
+          '!is_live',
+          '--newline',
+          '--progress',
+          '--progress-template',
+          'download:clip-progress:%(progress._percent_str)s',
+          '--format',
+          'bv$cap/b$cap,ba/b$cap',
+          '--format-sort',
+          'height',
+          '--output',
+          p.join(temporary.path.replaceAll('%', '%%'),
+              'source.%(format_id)s.%(ext)s'),
+          '--',
+          request.url,
+        ], onStdout: (line) {
+          if (_disposed || !line.startsWith('clip-progress:')) return;
+          final percent = double.tryParse(
+            line.substring('clip-progress:'.length).replaceAll('%', '').trim(),
+          );
+          if (percent != null && percent.isFinite) {
+            onProgress(false, (percent / 100).clamp(0.0, 1.0));
+          }
+        });
+        download.requireSuccess('Download failed');
+        _ensureRunning();
+        source = await _probeSource(temporary);
+        _ensureRunning();
+        try {
+          await _cache.store(request.videoId, request.quality.name,
+              {source.video, source.audio});
+        } catch (error) {
+          _ensureRunning();
+          onWarning(
+              'Could not retain the source in cache; continuing with temporary media. $error');
         }
       }
-      if (video == null || audio == null) {
-        throw StateError(
-          'No usable source was downloaded. Choose a finished video with audio and a video format at 1080p or below.',
-        );
-      }
-      final videoPath = video;
-      final audioPath = audio;
+      _ensureRunning();
+      final videoPath = source.video;
+      final audioPath = source.audio;
+      final duration = source.duration;
       if (duration != null &&
           duration.isFinite &&
           request.endSeconds > duration + 0.5) {
@@ -353,6 +366,62 @@ class ClipPipeline {
         }
       }
     }
+  }
+
+  Future<({String video, String audio, double? duration})> _probeSource(
+      Directory directory) async {
+    String? video;
+    String? audio;
+    double? duration;
+    await for (final file in directory.list(followLinks: false)) {
+      _ensureRunning();
+      if (file is! File || !p.basename(file.path).startsWith('source.')) {
+        continue;
+      }
+      if (file.path.endsWith('.part') || file.path.endsWith('.ytdl')) {
+        throw const FormatException('Source download is incomplete.');
+      }
+      if (await file.length() == 0) {
+        throw const FormatException('Source media is empty.');
+      }
+      final probe = await _tools.run(
+          _bundledTools.executable('ffprobe'),
+          [
+            '-v',
+            'error',
+            '-show_entries',
+            'stream=codec_type:format=duration',
+            '-of',
+            'json',
+            file.path,
+          ],
+          timeout: const Duration(seconds: 30));
+      probe.requireSuccess('Unable to inspect source media');
+      if (probe.stderr.trim().isNotEmpty) {
+        throw FormatException(
+            'Source media is damaged: ${probe.stderr.trim()}');
+      }
+      final data = jsonDecode(probe.stdout) as Map<String, dynamic>;
+      final streams = (data['streams'] as List<dynamic>?) ?? [];
+      final fileDuration = double.tryParse('${data['format']?['duration']}');
+      if (fileDuration == null || !fileDuration.isFinite || fileDuration <= 0) {
+        throw const FormatException('Source media has no usable duration.');
+      }
+      if (streams.any((stream) => stream['codec_type'] == 'video')) {
+        video = file.path;
+        duration = fileDuration;
+      }
+      if (streams.any((stream) => stream['codec_type'] == 'audio')) {
+        audio = file.path;
+      }
+    }
+    if (video == null || audio == null) {
+      throw StateError(
+        'No usable source video and audio found. Choose a finished video '
+        'with audio and an available format at the requested quality.',
+      );
+    }
+    return (video: video, audio: audio, duration: duration);
   }
 
   Future<File> _reserveOutput(ClipRequest request) async {

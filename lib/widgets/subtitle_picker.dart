@@ -225,6 +225,7 @@ class _SubtitlePickerState extends State<SubtitlePicker> {
                 ),
               ),
               if (widget.loading) const LinearProgressIndicator(),
+              const SizedBox(height: 8),
               if (widget.error != null) ...[
                 Text(widget.error!,
                     style: TextStyle(color: theme.colorScheme.error)),

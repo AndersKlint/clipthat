@@ -7,6 +7,7 @@ import '../app_brand.dart';
 import '../controllers/clip_controller.dart';
 import '../models/clip_job.dart';
 import '../models/clip_request.dart';
+import '../models/video_quality.dart';
 import '../widgets/clip_queue.dart';
 import '../widgets/subtitle_picker.dart';
 import '../widgets/workspace_panel.dart';
@@ -30,6 +31,7 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
   final _output = TextEditingController();
   final Map<TextEditingController, String> _lastInput = {};
   bool _includeSubtitles = true;
+  VideoQuality _quality = VideoQuality.best;
   bool _pickingDirectory = false;
   bool _submitting = false;
   String? _error;
@@ -40,6 +42,7 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
     _output.text = _controller.outputDirectory;
     _url.addListener(_subtitleSourceChanged);
     unawaited(_restoreOutputDirectory());
+    unawaited(_controller.initializeCache());
   }
 
   void _subtitleSourceChanged() {
@@ -110,6 +113,7 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
         outputDirectory: _output.text,
         includeSubtitles: _includeSubtitles,
         subtitleTracks: _controller.selectedSubtitleTracks,
+        quality: _quality,
       );
 
   ClipRequest? get _preview {
@@ -165,6 +169,17 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
     }
   }
 
+  Future<void> _clearCache() async {
+    final cleared = await _controller.clearCache();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(cleared
+          ? 'Temporary source cache cleared. Saved clips are unchanged.'
+          : _controller.cacheError ??
+              'Cache is busy. Wait for queued clips or maintenance to finish, then try again.'),
+    ));
+  }
+
   Future<void> _chooseDirectory() async {
     setState(() => _pickingDirectory = true);
     try {
@@ -216,7 +231,22 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
                       children: [
                         _BrandHeader(
                             themeMode: widget.themeMode,
+                            canClearCache: _controller.canClearCache,
+                            onClearCache: () => unawaited(_clearCache()),
                             onThemeChanged: widget.onThemeChanged),
+                        if (_controller.cacheError case final message?) ...[
+                          const SizedBox(height: 12),
+                          Semantics(
+                            liveRegion: true,
+                            child: Text(message),
+                          ),
+                          TextButton(
+                            onPressed: _controller.canClearCache
+                                ? () => unawaited(_clearCache())
+                                : null,
+                            child: const Text('Retry clearing cache'),
+                          ),
+                        ],
                         const SizedBox(height: 16),
                         LayoutBuilder(
                           builder: (context, workspace) {
@@ -360,6 +390,29 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
               ),
             ),
           ),
+          const SizedBox(height: 20),
+          Tooltip(
+            message:
+                'Choose the highest available quality at or below this selection. Best available has no resolution cap.',
+            child: DropdownButtonFormField<VideoQuality>(
+              initialValue: _quality,
+              decoration: const InputDecoration(labelText: 'Desired quality'),
+              items: [
+                for (final quality in VideoQuality.values)
+                  DropdownMenuItem(
+                    value: quality,
+                    child: Text(quality.label),
+                  ),
+              ],
+              onChanged: (quality) {
+                if (quality == null) return;
+                setState(() {
+                  _quality = quality;
+                  _error = null;
+                });
+              },
+            ),
+          ),
           const SizedBox(height: 12),
           Material(
             color: colors.surface,
@@ -369,8 +422,7 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
               child: SwitchListTile(
                 title: const Text('Download subs'),
                 value: _includeSubtitles,
-                onChanged: (value) =>
-                    setState(() => _includeSubtitles = value),
+                onChanged: (value) => setState(() => _includeSubtitles = value),
                 contentPadding: EdgeInsets.zero,
               ),
             ),
@@ -437,7 +489,7 @@ class _ClipWorkspaceState extends State<ClipWorkspace> {
           const SizedBox(height: 16),
           Tooltip(
             message:
-                'Downloads the full video first, then encodes the selected range. Queued clips run one at a time.',
+                'Reuses a temporary source for the same video and requested quality, or downloads it first. Uses the highest available quality at or below your selection, then encodes the range. Clips run one at a time.',
             child: SizedBox(
               width: double.infinity,
               child: FilledButton(
@@ -457,6 +509,7 @@ enum _HeaderAction {
   system(ThemeMode.system),
   light(ThemeMode.light),
   dark(ThemeMode.dark),
+  clearCache(null),
   about(null);
 
   const _HeaderAction(this.themeMode);
@@ -465,10 +518,17 @@ enum _HeaderAction {
 }
 
 class _BrandHeader extends StatelessWidget {
-  const _BrandHeader({required this.themeMode, required this.onThemeChanged});
+  const _BrandHeader({
+    required this.themeMode,
+    required this.onThemeChanged,
+    required this.canClearCache,
+    required this.onClearCache,
+  });
 
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeChanged;
+  final bool canClearCache;
+  final VoidCallback onClearCache;
 
   @override
   Widget build(BuildContext context) {
@@ -502,13 +562,15 @@ class _BrandHeader extends StatelessWidget {
           ),
         ),
         PopupMenuButton<_HeaderAction>(
-          tooltip: 'Appearance and About',
+          tooltip: 'Settings',
           initialValue: _HeaderAction.values
               .firstWhere((action) => action.themeMode == themeMode),
           onSelected: (action) {
             final mode = action.themeMode;
             if (mode != null) {
               onThemeChanged(mode);
+            } else if (action == _HeaderAction.clearCache) {
+              onClearCache();
             } else {
               showAboutDialog(
                 context: context,
@@ -543,6 +605,11 @@ class _BrandHeader extends StatelessWidget {
                   }),
                 ),
             const PopupMenuDivider(),
+            PopupMenuItem(
+              value: _HeaderAction.clearCache,
+              enabled: canClearCache,
+              child: const Text('Clear cache'),
+            ),
             const PopupMenuItem(
               value: _HeaderAction.about,
               child: Text('About ClipThat!'),
