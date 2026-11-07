@@ -28,13 +28,11 @@ make windows-installer
 
 The Inno Setup definition is `packaging/windows/clipthat.iss`. Setup uses `GetFileVersion` on the built `yt_section_downloader.exe` for its version; it does not parse release tags or `pubspec.yaml`.
 
-Each installer build resolves the latest stable official yt-dlp and selects compatible stable Deno and stable-branch FFmpeg binaries. Selected versions and download details are recorded, not version locks. Packaging does not compile or freeze tools, crawl Deno sources, or require manually supplied source archives or repository variables. See [tool packaging](../tools/README.md) for upstream selection and license obligations.
+Each installer build resolves the latest stable official yt-dlp and selects compatible stable Deno and stable-branch FFmpeg binaries. Selected versions and download details are recorded, not version locks. Packaging uses upstream prebuilts without custom tool compilation/freezing. See [tool packaging](../tools/README.md) for upstream selection.
 
-Validate startup of all four tools and libx264/native AAC encoding support before considering packaging complete. The outputs are `dist/windows-x64/ClipThat-windows-x64.zip`, `ClipThat-windows-x64-setup.exe`, and `SHA256SUMS-windows-x64` listing both binaries. Both assets include the complete app, tools, upstream notices, and available source access records. No sibling tool source ZIP is produced.
+Validate startup of all four tools and libx264/native AAC encoding support before considering packaging complete. The outputs are `dist/windows-x64/ClipThat-windows-x64.zip`, `ClipThat-windows-x64-setup.exe`, and `SHA256SUMS-windows-x64` listing both binaries. Both assets include the complete app, tools, upstream notices, and available source links. There is no MSI, signing, or automatic Visual C++ runtime installation.
 
-Both assets include `licenses/ClipThat-LICENSE.txt` (MIT for ClipThat!'s own code) and `licenses/THIRD_PARTY_NOTICES.md`; bundled components retain their own terms. There is no MSI, signing, or automatic Visual C++ runtime installation.
-
-Before public distribution, obtain complete matching supplier source/build materials for official standalone yt-dlp and BtbN FFmpeg: no verified complete, durable, exact-matching corresponding-source download bundle has been found. Remaining Deno native/Cargo notices and MPL source applicability also need resolution. Generic recipes or core archives are insufficient. Required sources may be separate accessible downloads; users need not download them to install. Current tooling generates no complete source bundle. See [licensing gaps and remedy](../tools/README.md#licenses-and-source-access).
+Both assets include `licenses/ClipThat-LICENSE.txt`, `licenses/THIRD_PARTY_NOTICES.md`, and upstream materials under `licenses/tools/`. See [third-party notices](https://github.com/AndersKlint/clipthat/blob/main/THIRD_PARTY_NOTICES.md) for licensing terms.
 
 ## Manual checks
 
@@ -43,6 +41,6 @@ Before public distribution, obtain complete matching supplier source/build mater
 3. Check UI resizing, invalid links/time ranges, and output-directory selection. Queue two clips; confirm sequential processing, retry, cancellation, temporary/incomplete-output cleanup, and preservation of existing files.
 4. Inspect precise MKV trimming, H.264/AAC, and English VTT when available. Missing/disabled captions and caption fallback should not fail an otherwise valid clip.
 5. Try network/restricted-video and unwritable/full-destination failures. In a disposable bundle, rename a tool and confirm the job reports actionable repair guidance; restore it, and retry.
-6. Check selected tool versions, notices, and available source access records against the bundled binaries.
+6. Check selected tool versions, notices, and available source links against the bundled binaries.
 
 Native Windows packaging and these behavior checks remain required; Linux builds do not verify Windows. The workflow ensures Inno Setup is available using Chocolatey and retains the ZIP, setup EXE, and platform checksums as Actions artifacts. Manual `workflow_dispatch` requires no tag and does not publish a release. Pushing a `v*` tag triggers Windows and Linux builds; successful platforms independently publish their distinct assets to the same nondraft, nonprerelease GitHub Release. A failed platform may leave partial assets until retry. See [workflow instructions](../../README.md#github-release-workflows).

@@ -1,6 +1,6 @@
 # ClipThat! – Paste a Link. Grab Your Clip.
 
-**ClipThat!** is a desktop app for effortlessly downloading and cutting clips from a URL in one go. Based on yt-dlp, so supports most big platforms. Simply paste a link, choose a time range and output folder, and queue your clips. Clips are saved as H.264/AAC MKV with your selected VTT subtitle tracks when enabled.
+**ClipThat!** is a desktop app for downloading and cutting YouTube clips in one go. Paste a YouTube link, choose a time range and output folder, and queue your clips. Clips are saved as H.264/AAC MKV with your selected VTT subtitle tracks when enabled.
 
 **[Download ClipThat!](https://drjetski.com/projects/clipthat)**
 
@@ -56,8 +56,10 @@ See [tool packaging](packaging/tools/README.md) and [Windows packaging](packagin
 
 The [Linux](.github/workflows/release-linux.yml) and [Windows](.github/workflows/release-windows.yml) workflows retain packages and checksums as Actions artifacts. Manual runs need no tag and produce artifacts only. Pushing a `v*` tag publishes each successful platform's assets to one shared GitHub Release; failed platforms can be retried.
 
+Separate publish jobs use `softprops/action-gh-release@v2`, job-scoped `contents: write`, and shared concurrency. Releases are nondraft and nonprerelease, without tag/pubspec matching, automatic version parsing, or generated notes.
+
 Local packaging and Actions artifacts keep the untagged names `ClipThat-linux-x64.flatpak`, `ClipThat-windows-x64.zip`, and `ClipThat-windows-x64-setup.exe`. Only the publish jobs append the exact tag before the binary extension. For tag `v0.5.4-beta`, Release downloads are `ClipThat-linux-x64-v0.5.4-beta.flatpak`, `ClipThat-windows-x64-v0.5.4-beta.zip`, and `ClipThat-windows-x64-setup-v0.5.4-beta.exe`. Checksum filenames remain `SHA256SUMS-linux-x64` and `SHA256SUMS-windows-x64`; Release checksums are regenerated to reference the tagged binaries.
 
 ## License
 
-ClipThat!'s own code is [MIT licensed](LICENSE). Bundled components have separate terms; see [third-party notices](THIRD_PARTY_NOTICES.md) and [source obligations](packaging/tools/README.md#licenses-and-source-access) before redistribution.
+ClipThat!'s own code is [MIT licensed](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for metadata and bundled-component terms.
